@@ -20,8 +20,9 @@ jobs:
           Rscript -e "attachment::install_if_missing(attachment::att_from_rmds(path = '.'))"
       - name: render all R Markdown documents 
         run: |
-          Rscript -e "lapply(list.files(pattern = 'Rmd|rmd', recursive = TRUE), rmarkdown::render)"
+          Rscript -e "lapply(fs::dir_ls('notebooks', glob='*.Rmd', recurse=TRUE), rmarkdown::render)"
       - name: Commit rendered files
         run: |
+          git add notebooks/*
           git commit -m "Committing rendered files"
           git push origin master
