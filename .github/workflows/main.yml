@@ -25,4 +25,4 @@ jobs:
         run: |
           git add notebooks/*
           git commit -m "Committing rendered files"
-          git push origin master
+          git push origin
