@@ -2,7 +2,7 @@ name: render all R Markdown documents
 
 on:
   push:
-    branches: master # from : https://gist.github.com/benmarwick/4e239fcbd05db928e1b988a92fb32285
+    branches: main # from : https://gist.github.com/benmarwick/4e239fcbd05db928e1b988a92fb32285
 
 
 jobs:
@@ -28,4 +28,4 @@ jobs:
         run: |
           git add notebooks/*
           git commit -m "Committing rendered files" || echo "No changes to commit"
-          git push origin master || echo "No changes to commit"
+          git push origin main || echo "No changes to commit"
