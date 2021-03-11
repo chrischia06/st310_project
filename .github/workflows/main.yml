@@ -23,6 +23,5 @@ jobs:
           Rscript -e "lapply(list.files(pattern = 'Rmd|rmd', recursive = TRUE), rmarkdown::render)"
       - name: Commit rendered files
         run: |
-          git add -A
           git commit -m "Committing rendered files"
           git push origin master
