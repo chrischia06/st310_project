@@ -13,7 +13,7 @@ jobs:
       - uses: r-lib/actions/setup-tinytex@master
       - name: Install known depedencies  
         run: |
-          Rscript -e "install.packages(c('bookdown', 'tidyverse', 'rmarkdown', 'knitr', 'devtools', 'here', 'tidyverse'))"
+          Rscript -e "install.packages(c('rmarkdown', 'knitr', 'devtools', 'here', 'tidyverse'))"
           Rscript -e "devtools::install_github('ThinkR-open/attachment')"
       - name: Install unknown depedencies 
         run: |
@@ -21,3 +21,8 @@ jobs:
       - name: render all R Markdown documents 
         run: |
           Rscript -e "lapply(list.files(pattern = 'Rmd|rmd', recursive = TRUE), rmarkdown::render)"
+      - name: Commit rendered files
+        run: |
+          git add -A
+          git commit -m "Committing rendered files"
+          git push origin master
