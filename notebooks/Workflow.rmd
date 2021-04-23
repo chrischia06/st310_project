@@ -1,0 +1,110 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+In this notebook, we lay out the workflow of the project. Please use the same naming convention as those presented here. 
+
+Data Source: 
+https://www.kaggle.com/c/tabular-playground-series-mar-2021/data
+
+<Briefly describe data and significance of it> (some content available from Chris's first notebook)
+
+## Workflow 
+As the data is too big (300,000 observations), it is too computationally expensive to run all our hyperparameter tuning on the full dataset. Hence, we will do tuning only on a sample of the data and apply these tuned hyperparameters to the full dataset. 
+
+1. Sample 4000 observations from the original data. 
+2. Split 3000 of these into the training data and 1000 into test data. 
+3. Run different machine learning models on the training data and tune them on the test data. We aim to maximise the area under curve (AUC) as this is the metric that was being used on Kaggle. 
+
+#### Area Under Curve(AUC)
+<Explain AUC> 
+https://en.wikipedia.org/wiki/Receiver_operating_characteristic
+
+### Load Data 
+```{r}
+library(tidyverse)
+library(ggplot2)
+df <- read.csv(file = "train.csv")
+df <- df %>% mutate(target = as.factor(target))
+
+# Convert all categorical factors to variables 
+# May want to do it in a smarter way 
+df$cat0 <- as.factor(df$cat0)
+df$cat1 <- as.factor(df$cat1)
+df$cat2 <- as.factor(df$cat2)
+df$cat3 <- as.factor(df$cat3)
+df$cat4 <- as.factor(df$cat4)
+df$cat5 <- as.factor(df$cat5)
+df$cat6 <- as.factor(df$cat6)
+df$cat7 <- as.factor(df$cat7)
+df$cat8 <- as.factor(df$cat8)
+df$cat9 <- as.factor(df$cat9)
+df$cat10 <- as.factor(df$cat10)
+df$cat11 <- as.factor(df$cat11)
+df$cat12 <- as.factor(df$cat12)
+df$cat13 <- as.factor(df$cat13)
+df$cat14 <- as.factor(df$cat14)
+df$cat15 <- as.factor(df$cat15)
+df$cat16 <- as.factor(df$cat16)
+df$cat17 <- as.factor(df$cat17)
+df$cat18 <- as.factor(df$cat18)
+```
+
+
+```{r}
+library(tidymodels)
+set.seed(1)
+
+sam = sample(1:nrow(df), 4000) # may want to modify this to stratified sampling 
+df_sample = df[sam,]
+
+X = df[, -length(df)]
+y <- df$target
+
+X.sam = model.matrix(~., X[sam,])
+y.sam <- y[sam]
+
+df_split <- initial_split(df_sample, prop = 3/4)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+```
+
+# Models to consider 
+<Do this in other notebooks for now> 
+
+## Logistic Regression 
+### Standard GLM - Mun Fai
+### GLMNet (Lasso, Ridge, ElasticNet) - Yen
+  Interpretation 
+  
+### GLMNet CV - Yen
+  Interpretation 
+  
+### Gradient Descent - Chris
+  Ensure that code is right by comparing coefficients with GLM 
+
+## Random Forests 
+## Gradient Boosting 
+
+# Other things to consider 
+
+## Performance tweaks
+### Variable importance 
+Performance may improve if we only use the more important features 
+
+### Correlation between variables 
+
+Remove 1 out of a pair of features that are highly correlated 
+
+### Outlier detection 
+
+## Interpretable Machine Learning 
+https://christophm.github.io/interpretable-ml-book/pdp.html
+
+### Partial Dependence Plots
+### Shapley? 
+
+
