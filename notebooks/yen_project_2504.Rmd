@@ -1,0 +1,278 @@
+---
+title: "Project"
+author: "Zhen-Yen Chan"
+date: "4/21/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(arm)
+library(car)
+library(tidyr)
+library(glmnet)
+library(caret)
+library(tidymodels)
+library(pROC)
+library(randomForest)
+library(e1071)
+```
+
+## Load data, set seed
+```{r}
+df <- read.csv(file = "train.csv")
+set.seed(1)
+```
+
+## Pre-processing
+```{r}
+rownames(df) = df$id
+df = df[,-1] # remove id column
+df$target=as.factor(df$target)
+#head(df)
+#summary(df)
+```
+
+```{r}
+# turn all categorical variables into factors
+df$cat1 <- as.factor(df$cat1)
+df$cat2 <- as.factor(df$cat2)
+df$cat3 <- as.factor(df$cat3)
+df$cat4 <- as.factor(df$cat4)
+df$cat5 <- as.factor(df$cat5)
+df$cat6 <- as.factor(df$cat6)
+df$cat7 <- as.factor(df$cat7)
+df$cat8 <- as.factor(df$cat8)
+df$cat9 <- as.factor(df$cat9)
+df$cat10 <- as.factor(df$cat10)
+df$cat11 <- as.factor(df$cat11)
+df$cat12 <- as.factor(df$cat12)
+df$cat13 <- as.factor(df$cat13)
+df$cat14 <- as.factor(df$cat14)
+df$cat15 <- as.factor(df$cat15)
+df$cat16 <- as.factor(df$cat16)
+df$cat17 <- as.factor(df$cat17)
+df$cat18 <- as.factor(df$cat18)
+```
+
+## Exploratory Data Analysis
+
+Plot continuous variables in boxplots
+```{r}
+# colnames(df)
+# stack variables to plot
+cont.stacked <- gather(data=df[,20:31],-target,key="var",value="value")
+p.cont <- ggplot(cont.stacked,aes(x=target,y=value),fill=factor(value)) + geom_boxplot() + coord_flip() + facet_wrap(~var, scales="free_x")
+p.cont
+```
+
+Plot catgorical variables in barplots
+```{r}
+# divide categorical variables into 2 groups
+g1 <- c(1:10,31)
+g2 <- c(11:19,31)
+cate.stacked1 <- gather(data=df[,g1],-target,key="var",value="value")
+p.cate1 <- ggplot(cate.stacked1,aes(x=value,fill=target)) + geom_bar(position="fill") + scale_y_continuous(name = "Within group Percentage", labels = scales::percent) + facet_wrap(~var, scales="free_x")
+cate.stacked2 <- gather(data=df[,g2],-target,key="var",value="value")
+p.cate2 <- ggplot(cate.stacked2,aes(x=value,fill=target)) + geom_bar(position="fill") + scale_y_continuous(name = "Within group Percentage", labels = scales::percent) + facet_wrap(~var, scales="free_x")
+p.cate1
+p.cate2
+```
+
+## Split and prepare data for modelling
+```{r}
+sam = sample(1:nrow(df), 4000)
+df_sample = df[sam,]
+df_split <- initial_split(df_sample, prop = 3/4)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+```
+
+## Logistic regression (baseline)
+
+1) Run logistic regression with a few variables (selected visually from plots)
+```{r}
+glm1 <- glm(target~cont3+cont4+cat13+cat18,data=df_train, family=binomial(link="logit"),control = list(maxit = 100))
+summary(glm1)
+```
+
+```{r}
+preds1 <- predict(glm1, df_test, type="response")
+pred_classes1 <- ifelse(preds1 > 0.5, 1,0)
+acc1=mean(pred_classes1 == df_test$target)
+roc1=roc(df_test$target, pred_classes1)
+auc1=auc(roc1)
+cbind(acc1,auc1)
+```
+
+
+2) Run logistic regression for all variables
+```{r}
+glm2 <- glm(target~.,data=df_train, family=binomial(link="logit"),control = list(maxit = 100))
+library(arm)
+display(glm2)
+```
+
+Calculate test accuracy and AUC 
+```{r}
+preds2 <- predict(glm2, df_test, type="response")
+pred_classes2 <- ifelse(preds2 > 0.5, 1,0)
+acc2=mean(pred_classes0 == df_test$target)
+roc2=roc(df_test$target, pred_classes2)
+auc2=auc(roc2)
+cbind(acc2,auc2)
+
+# compare nested models
+anova(glm1, glm2, test="Chisq")
+```
+
+// factor in test data has new levels
+// multicollinearity
+
+
+// Identify overall significant variables
+```{r}
+library(car)
+#Anova(glm0)
+```
+
+// Check for multicollinearity from multiple linear regression
+```{r}
+mlr1 <- lm(target~., data=df_train)
+library(car)
+vif(mlr1)
+attributes(alias(mlr1)$Complete)$dimnames[[1]]
+mlr1 <- lm(target~.-cat8-cat10, data=df_train)
+vif(mlr1)
+```
+
+
+Using tidymodels
+```{r}
+logit_fit <- 
+  logistic_reg(mode = "classification") %>%
+  set_engine(engine = "glmnet", trace.it =TRUE, family='binomial') %>% 
+  fit(target ~ cat0+cat1+cat2+cat7+cat11+cat14+cat15+cat16+cat18+cont5+cont8+cont10, data = df_train)
+
+model_res <- 
+  logit_fit %>% 
+  pluck("fit") %>% 
+  summary()
+model_res
+```
+
+Test accuracy and AUC
+// pred_classes has 2 classes
+```{r}
+preds1 <- predict(logit_fit, df_test, penalty = 0.0007, type="prob")
+pred_classes1 <- ifelse(preds1 > 0.5, 1,0)
+mean(pred_classes1 == df_test$target)
+roc1=roc(df_test$target, pred_classes1)
+auc(roc1)
+```
+
+Baseline test accuracy: 73.5%
+
+One-hot encode categorical variables
+```{r}
+X_train = df_train[, -length(df_train)]
+y_train <- df_train$target
+# dmy1 <- dummyVars("~.", data=X_train)
+# X_train <- data.frame(predict(dmy1, newdata=X_train))
+# df_train=cbind(X_train, y_train)
+# colnames(df_train)[colnames(df_train) == "y_train"] <- "target" # Rename column
+
+X_test = df_test[, -length(df_test)]
+y_test <- df_test$target
+# dmy2 <- dummyVars("~.", data=X_test)
+# X_test <- data.frame(predict(dmy2, newdata=X_test))
+# df_test=cbind(X_test, y_test)
+# colnames(df_test)[colnames(df_test) == "y_test"] <- "target" # Rename column
+```
+
+## Logistic ridge regression
+
+Put data into matrices
+```{r}
+X_train = model.matrix(~., X_train)
+X_test = model.matrix(~., X_test)
+```
+
+
+```{r}
+glm3 <- cv.glmnet(X_train, y_train, family="binomial"(link="logit"), alpha=0)
+glm3
+```
+
+Test accuracy and ROC
+```{r}
+preds3=predict(glm3, newx=X_test, type="response", s=glm3$lambda.min)
+pred_classes3 <- ifelse(preds3 > 0.5, 1,0)
+acc3=mean(pred_classes3==y_test)
+roc3=roc(y_test, pred_classes3)
+auc3=auc(roc3)
+cbind(acc3,auc3)
+```
+
+## Random forest
+
+```{r}
+tree_def <- randomForest(X_train, y_train)
+tree_def
+(2082+418)/3000 # train accuracy
+```
+
+```{r}
+predsdef <- predict(tree_def, X_test, type="response")
+confusionMatrix(predsdef, y_test)
+# test accuracy is 0.858
+predsdef=as.numeric(predsdef)
+roc_test2=roc(y_test, predsdef)
+auc(roc_test2)
+# test AUC is 0.7553
+```
+
+Define the control
+```{r}
+control <- trainControl(method = "cv",
+    number = 10,
+    search = "grid")
+```
+
+Random forest with default values
+```{r}
+rf1 <- train(target~.,
+    data = df_train,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = control)
+```
+
+
+
+Search for best mtry
+```{r}
+tuneGrid <- expand.grid(.mtry = c(1: 10))
+rf_mtry <- train(target~.,
+    data = df_train,
+    method = "rf",
+    metric = "Accuracy",
+    tuneGrid = tuneGrid,
+    trControl = control,
+    importance = TRUE,
+    nodesize = 14,
+    ntree = 300)
+print(rf_mtry)
+plot(rf_mtry)
+```
+
+
+
+
+
+
+References:
+https://www.guru99.com/r-random-forest-tutorial.html
