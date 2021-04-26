@@ -3,8 +3,10 @@ title: "ST310 Course Project"
 author: "Chris Chia, Mun Fai Chan, Zhen Yen Chan"
 date: "`r format(Sys.time(), '%d/%m/%y')`"
 output:
-  html_notebook: default
+  html_notebook:
+    toc: true
   html_document:
+    toc: true
     df_print: paged
   pdf_document: default
 header-includes:
@@ -32,9 +34,9 @@ references:
     year: 2016
 ---
 
-## ST310 Course Project
+# ST310 Course Project
 
-We have obtained data from the [Kaggle March Tabular Playground](#https://www.kaggle.com/c/tabular-playground-series-mar-2021/overview) competition. The data consists of *anonymised features*, which correspond to an outcome variable. Although the data is anonymised, we are told that it relates to a problem in insurance.
+We have obtained data from the [Kaggle March Tabular Playground](#https://www.kaggle.com/c/tabular-playground-series-mar-2021/overview) competition. The data consists of *anonymised features*, which correspond to a binary outcome variable; in other words the task is a **classification problem**. Although the data is anonymised, we are told that it relates to a problem in **insurance**.
 
 We first read import key libraries and import the data 
 ```{r load-libs, warning=FALSE, message=FALSE}
@@ -186,16 +188,19 @@ summary(glm1)
 ```{r message=FALSE, warning=FALSE}
 pred_train <- predict(glm1, df_train, type="response")
 pred_test <- predict(glm1, df_test, type="response")
-pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
-pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
-acc1=mean(pred_classes_train == df_train$target)
-roc1=roc(df_train$target, pred_train)
-auc1=auc(roc1)
-acc2=mean(pred_classes_test == df_test$target)
-roc2=roc(df_test$target, pred_test)
-auc2=auc(roc2)
 
-results["glm-small",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+diagnosis <- function(train_pred, test_pred, train_true, test_true){
+  train_classes <- ifelse(train_pred > 0.5, 1,0)
+  test_classes <- ifelse(test_pred > 0.5, 1,0)
+  acc1 <- mean(pred_classes_train == train_true)
+  auc1 <- auc(roc(train_true, train_pred))
+  acc2 <- mean(test_classes == test_true)
+  auc2 <- auc(roc(test_true, test_pred))
+  data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+}
+
+
+results["glm-small",] <- diagnosis(pred_train, pred_test, df_train$target, df_test$target)
 results
 ```
 
@@ -339,16 +344,70 @@ results
 
 #### Random Forest
 ```{r}
-dmy_train <- dummyVars("~.", data = df_train[,-length(df_train)])
-dmy_test <- dummyVars("~.", data = df_test[,-length(df_test)])
-X_train <- as.matrix(data.frame(predict(dmy_train,df_train)))
-X_test <- as.matrix(data.frame(predict(dmy_test,df_test)))
+control <- trainControl(method = "cv",
+    number = 2,
+    search = "grid")
+
+ptm=proc.time()
+set.seed(1)
+rf1 <- train(target~.,
+    data = df_train,
+    method = "rf",
+    metric = "Accuracy",
+    trControl=control, 
+    importance=T,
+    maxnodes=128,
+    ntree=64)
+time1=proc.time()-ptm
+time1
+#ls(rf1)
+varImpPlot(rf1$finalModel, n.var=30, type=1)
+```
+```{r}
+pred_train <- predict(rf1,df_train,type='prob')[,2]
+pred_test <- predict(rf1, df_test, type='prob')[,2]
+results["rf",] <- diagnosis(pred_train, pred_test, df_train$target, df_test$target)
+results
 ```
 
+```{r}
+X_train = df_train[,c(cat_feats, cont_feats)]
+y_train = as.integer(df_train$target)
+X_test = df_test[,c(cat_feats, cont_feats)]
+y_test = as.integer(df_test$target)
+rf <- randomForest(X_train, y_train, ntree=100)
+
+importances <- data.frame(importance(rf))
+importances$features <- rownames(importances)
+n_features <- length(rownames(importances))
+importances <- importances[order(importances$MeanDecreaseGini),]
+importances$features <- factor(importances$features, level=importances$features)
+N <- 20
+ggplot(importances[(n_features-N+1):n_features,], aes(x=MeanDecreaseGini, y=features)) + geom_bar(stat="identity")
+```
+
+```{r}
+pred_train <- predict(rf, X_train, type="prob")[, 2]
+pred_test <- predict(rf, X_test, type="prob")[, 2]
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["rf",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+results
+```
 
 #### XGBoost
-```{r}
 
+For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. Gradient Boosted Decision Trees
+
+
+```{r}
 dmy_train <- dummyVars("~.", data = df_train[,-length(df_train)])
 dmy_test <- dummyVars("~.", data = df_test[,-length(df_test)])
 X_train <- as.matrix(data.frame(predict(dmy_train,df_train)))
@@ -371,9 +430,27 @@ roc2=roc(df_test$target, pred_test)
 auc2=auc(roc2)
 
 results["xgb",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
-```
+results
 
+importance_matrix <- xgb.importance(model=bst)
+xgb.plot.importance(importance_matrix)
+```
+```{r}
+library(shapr)
+
+explainer <- shapr(X_train, bst)
+p <- mean(y_train)
+explanation <- explain(
+  X_test,
+  approach = "empirical",
+  explainer = explainer,
+  prediction_zero = p
+)
+
+```
 #### CatBoost
+
+We also consider briefly examine the `catboost` library for **gradient boosted decision trees**. The catboost library has the advantage of learning an encoding for categorical variables, reducing the preprocessing that may be required. and is a popular machine learning model on Kaggle.
 
 ```{r}
 
@@ -403,6 +480,14 @@ results["catboost",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = ac
 results
 ```
 
+```{r}
+feat_importance <- catboost.get_feature_importance(model, pool)
+importances <- data.frame(feat_importance[order(feat_importance, decreasing=FALSE),])
+importances$features = rownames(importances)
+names(importances) <- c("importance","features")
+importances$features <- factor(importances$features, level=importances$features)
+ggplot(importances, aes(x=importance, y=features)) + geom_bar(stat="identity")
+```
 
 ```{r}
 
@@ -440,18 +525,14 @@ lr_fit <- lr_mod %>% fit(target ~., data=df_train)
 #   flights_wflow %>% 
 #   fit(data = df_train)
 ```
-## Interpretation
+## Links
+
++ https://www.kaggle.com/frankmollard/h2o-ml-ensemble
+
++ https://www.guru99.com/r-random-forest-tutorial.html
+
++ https://christophm.github.io/interpretable-ml-book/pdp.html
 
 ## Bibliography
 
 
-+ Preprocessing - encode categorical variables+ 
-+ Use small fold;
-+ Implement SGD from scratch
-+ Run GLM for 1 Var
-+ Run GLM / Logistic Regression - all
-+ Run GLM Ridge
-+ Run Trees - small fold;
-+ 
-
-https://www.kaggle.com/frankmollard/h2o-ml-ensemble
