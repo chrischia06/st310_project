@@ -3,52 +3,103 @@ title: "ST310 Course Project"
 author: "Chris Chia, Mun Fai Chan, Zhen Yen Chan"
 date: "`r format(Sys.time(), '%d/%m/%y')`"
 output:
-  pdf_document: default
   html_notebook: default
   html_document:
     df_print: paged
+  pdf_document: default
 header-includes:
-    - \usepackage {hyperref}
-    - \hypersetup {colorlinks = true, linkcolor = blue, urlcolor = blue}
+- \usepackage {hyperref}
+- \hypersetup {colorlinks = true, linkcolor = blue, urlcolor = blue}
 references:
 - id: hastie2009elements
-  title: "The Elements of Statistical Learning: Data Mining, Inference, and Prediction"
-  author: "Hastie, T. and Tibshirani, R. and Friedman, J.H."
+  title: 'The Elements of Statistical Learning: Data Mining, Inference, and Prediction'
+  author: Hastie, T. and Tibshirani, R. and Friedman, J.H.
   publisher: Springer
-  series: Springer series in statistics
   type: book
   issued:
     year: 2009
+- id: james2017introduction
+  title: "An Introduction To Statistical Learning"
+  author: James, Gareth, Daniela Witten, Trevor Hastie, and Robert Tibshirani
+  publisher: Springer
+  issued:
+    year: 2017
+- id: efron2016computer
+  title: "Computer Age Statistical Inference"
+  author: Efron, Bradley and Hastie, Trevor
+  publisher: Cambridge University Press
+  issued:
+    year: 2016
 ---
 
 ## ST310 Course Project
 
+We have obtained data from the [Kaggle March Tabular Playground](#https://www.kaggle.com/c/tabular-playground-series-mar-2021/overview) competition. The data consists of *anonymised features*, which correspond to an outcome variable. Although the data is anonymised, we are told that it relates to a problem in insurance.
 
-## Exploratory Data Analysis
-
-We have obtained data from [](), 
-
-```{r chunk}
+We first read import key libraries and import the data 
+```{r load-libs, warning=FALSE, message=FALSE}
 library(tidyverse)
 library(ggplot2)
+library(tidymodels)
+library(xgboost)
+library(catboost)
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(arm)
+library(car)
+library(tidyr)
+library(glmnet)
+library(caret)
+library(tidymodels)
+library(pROC)
+library(randomForest)
+library(e1071)
+library(arm)
 df <- read.csv(file = "../data/train.csv")
 cat(c("The dimensions of the array are :", dim(df)[1], ", ", dim(df)[2]))
 ```
 
-The dataset consists of 30 features,  19 *categorical variables* and 11 numerical variables. We will need to process these categorical variables in some manner, which we shall consider in the [subequent section](#).
+The dataset consists of 30 features,  19 *categorical variables* and 11 numerical variables. We will need to process these categorical variables in some manner, which we shall consider in the [subequent section](#univariate).
 
 With 30 variables, and no *specific* knowledge about which features may be potentially useful.
 
-### Univariate 
+
+## Methodology
+
+We consider the ROC-AUC (Receiving Operator Chararacteristic Area Under the Curve) metric, and **accuracy** metric. GIven the problem is indirectly one related to insurance, the outcome of interest is not only obtaining the correct predictions (accuracy) , but also accurate probabilities, which is what the AUC metric measures.The test accuracy
+
+## Preprocessing
+
+We first partition the data into our training and testing proportions
 
 ```{r}
 rownames(df) = df$id
-df = df[,-1]
-X = df[, -length(df)]
-y <- df$target
+df = df[,-1] # remove id column
+# the first 19 columns are categorical 
+cat_feats = 1:19
+cont_feats <- 20:30
+df[,cat_feats] <- lapply(df[,cat_feats], as.factor)
+df$target <- as.factor(df$target)
 ```
 
-```{r}
+```{r partition}
+# subsample the data for faster model imputation
+set.seed(1)
+sam = sample(1:nrow(df), 4000)
+df_sample = df[sam,]
+# Partition data into train and test; test will be our oos data
+set.seed(1)
+df_split <- initial_split(df_sample, prop = 3/4)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+```
+
+## Exploratory Data Analysis
+
+### Univariate EDA
+We observe that the univariate distributions of the *continuous* variables are all multi-modal and non-normal, but they are all normalised to the range of $[0, 1]$.
+```{r cont-viz}
 df %>% pivot_longer(cols = starts_with("cont"), names_to  = "cont") %>% 
    ggplot(aes(x = value))+
    geom_histogram(bins = 100, alpha = 0.85)+
@@ -56,9 +107,8 @@ df %>% pivot_longer(cols = starts_with("cont"), names_to  = "cont") %>%
    facet_wrap(cont~.,scales = "free")+
    theme_minimal()
 ```
-
-
-```{r}
+For the distributions of categorical variables, we see that there are categories with substantially more observations in one category, and also categories with a high number of categories, which will be an issue to address in our preprocessing step. 
+```{r cat-viz}
 df %>% pivot_longer(cols = contains(c("cat")), names_to  = "cat") %>% 
    ggplot(aes(x = value))+
    geom_bar(alpha = 0.85)+
@@ -66,21 +116,39 @@ df %>% pivot_longer(cols = contains(c("cat")), names_to  = "cat") %>%
    facet_wrap(cat~.,scales = "free")+
    theme_minimal()
 ```
-### Bivariate 
 
-```{r}
-library(plotly)
-df_num <- select_if(df[,-1], is.numeric)
-cor_matrix <- cor(df_num)
-library(reshape2)
-cor_matrix <- melt(cor_matrix)
-# plt <- heatmap()
-# ggplotly(plt)
-plt <- ggplot(data = cor_matrix, aes(x=Var1, y=Var2, fill=value)) + 
-  geom_tile() + scale_fill_gradient(name="Pearson Correlation")
-ggplotly(plt)
+
+### Bivariate EDA
+
+We group the continuous variables by the target and plot them as boxplots to see if there are any discernible differences by eye.
+
+```{r cont-by-target}
+cont.stacked <- gather(data=df[, c(cont_feats, 31)],-target,key="var",value="value")
+p.cont <- ggplot(cont.stacked,aes(x=target,y=value),fill=factor(value)) + geom_boxplot() + coord_flip() + facet_wrap(~var, scales="free_x")
+p.cont
 ```
-```{r}
+We do the same with categorical variables.
+```{r cat-by-target, warning=FALSE, message=FALSE}
+g1 <- c(1:10,31)
+g2 <- c(11:19,31)
+cate.stacked1 <- gather(data=df[,g1],-target,key="var",value="value")
+p.cate1 <- ggplot(cate.stacked1,aes(x=value,fill=target)) + geom_bar(position="fill") + scale_y_continuous(name = "Within group Percentage", labels = scales::percent) + facet_wrap(~var, scales="free_x")
+cate.stacked2 <- gather(data=df[,g2],-target,key="var",value="value")
+p.cate2 <- ggplot(cate.stacked2,aes(x=value,fill=target)) + geom_bar(position="fill") + scale_y_continuous(name = "Within group Percentage", labels = scales::percent) + facet_wrap(~var, scales="free_x")
+p.cate1
+p.cate2
+```
+
+We inspect the correlation matrix for our *continuous* variables, which could potentially indicate problems with multicollinearity if we are use to use (general) linear models. By eye, there do not appear to be significant clusters of correlation. We see that there is a cluster of variables `cont`, `cont`
+
+```{r cor-mat}
+df_num <- df[, cont_feats]
+cor_matrix <- cor(df_num)
+heatmap(cor_matrix)
+```
+Finally, we use Principal Components Analysis (PCA) as a means to visualise the data in low-dimension, to determine if there are any explicitly discernible trends. By eye, the classes do not appear to be linearly seperable - which suggest a non-linear method may be more effective. There do not appear to be any significant difference in the PCA representations for each class.
+
+```{r pca-viz}
 pcs <- prcomp(df_num[,-length(df_num)])
 set.seed(2021)
 ind <- sample(1:dim(df)[1], 20000)
@@ -88,18 +156,302 @@ sample <- data.frame(pcs$x[ind,1], pcs$x[ind,2], df[ind, "target"])
 names(sample) = c("pc1", "pc2", "y")
 ggplot(sample) + geom_jitter(aes(x = pc1, y = pc2, colour = factor(y)),alpha=0.7) + ggtitle('Principal Components')
 ```
-
 ## Modelling
 
-Linear Fit (Logistic Regression)
+We first consider the most simple baseline: we predict all labels either 0 or 1. This illustrates the issue with the accuracy metric, the *baseline* accuracy could be potentially high, leading to a misleading result.
+
 ```{r}
-fit <- lm(x= df$cont0, y=df$target)
+# train-test
+X_train = as.matrix(df_train[,grepl("cont", colnames(df_train))])
+y_train = as.numeric(as.matrix(df_train$target))
+X_test = as.matrix(df_test[,grepl("cont", colnames(df_train))])
+y_test = as.numeric(as.matrix(df_test$target))
+results = data.frame(train_acc = max(1 - mean(y_train), mean(y_train)),
+                     train_auc = 0.5,
+                     test_acc = max(1 - mean(y_test), mean(y_test)),
+                     test_auc = 0.5,
+                     row.names=c("baseline")
+                     )
+results
 ```
 
-Nonlinear Fit (Tree-based)
+## Logistic regression (baseline)
+
+For our baseline model we select several variables based on our bivariate plots. We run logistic regression with a few variables (selected visually from plots)
 ```{r}
-library(tidymodels)
+glm1 <- glm(target~cont3+cont4+cat13+cat18,data=df_train, family=binomial(link="logit"),control = list(maxit = 100))
+summary(glm1)
 ```
 
+```{r message=FALSE, warning=FALSE}
+pred_train <- predict(glm1, df_train, type="response")
+pred_test <- predict(glm1, df_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["glm-small",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+results
+```
+
+### SGD
+
+We demonstrate a `from scratch' Stochastic Gradient Descent routine for this classification problem
+
+The logistic loss with a \( \mathcal{L}^{2}\) penalty is given by:
+
+$$l(\boldsymbol{\beta}) = -\sum_{i = 1}^{N} y_{i} log(p(x_{i} ; \boldsymbol{\beta})) + (1 - y_{i}) log(1 - p(x_{i} ; \boldsymbol{\beta})) = \sum_{i = 1}^{N} \left [ y_{i}log \left (\frac{p(x_{i} ; \boldsymbol{\beta})}{1 - p(x_{i} ; \boldsymbol{\beta})} \right) + log(1 - p(x_{i} ; \boldsymbol{\beta})) \right ]$$
+
+$$ l(\boldsymbol{\beta})= -\sum_{i = 1}^{N}\left [y_{i} \boldsymbol{\beta}^{T} x_{i} - log(1 + exp(\boldsymbol{\beta}^{T}x_{i})) \right ]$$
+Then with the inclusion of the reularisation term:
+
+$$ l(\boldsymbol{\beta}) = -\sum_{i = 1}^{N} \left [y_{i} \boldsymbol{\beta}^{T} x_{i} - log(1 + exp(\boldsymbol{\beta}^{T}x_{i})) \right ] - \lambda \boldsymbol{\beta}^{T} \boldsymbol{\beta}$$
+
+
+The gradient is given by:
+
+$$\nabla(\boldsymbol{\beta}) = -\sum_{i = 1}^{N} \left [ y_{i} x_{i} - \frac{x_{i}exp(\boldsymbol{\beta}^{T} x_{i})}{1 + exp(\boldsymbol{\beta}^{T} x_{i})} \right] - \lambda 2\boldsymbol{\beta}$$
+
+```{r gradient-descent}
+# binary crossentropy / log-loss
+log_loss <- function(x, y, betas, lambda){
+  logits <- x %*% betas
+  - (t(y) %*% logits - sum(log(1 + exp(logits))) + lambda * t(betas) %*% betas) / dim(x)[1]
+}
+
+# logistic regression gradients
+gradients <- function(x, y, betas, lambda){
+  logits <- x %*% betas
+  - (t(x) %*% (y - exp(logits)/(1 + exp(logits)))) - lambda *2 * betas / dim(x)[1]
+}
+
+p = dim(X_train)[2]
+
+lambda = 0
+n_iters <- 100
+init_step_size <- 1e-6
+
+set.seed(2021)
+beta_init <- matrix(rnorm(p),nrow=p)
+beta_path <- matrix(rep(0, n_iters * p), nrow = n_iters, ncol=p)
+beta_path[1,] = beta_init
+
+last_grad <- grad <- gradients(X_train, y_train, beta_path[1,], lambda)
+beta_path[2,] = beta_init - init_step_size * grad
+grad <- gradients(X_train, y_train, beta_path[2,], lambda)
+
+losses <- rep(0, n_iters)
+
+for (i in 3:n_iters){
+    step_size <- as.numeric(t(beta_path[i - 1,] - beta_path[i - 2,]) %*% (grad - last_grad) / 
+                    (t(grad - last_grad) %*% (grad - last_grad)))
+    beta_path[i,] <- beta_path[i - 1,] - step_size * grad
+    last_grad <- grad
+    grad <- gradients(X_train, y_train, beta_path[i, ], lambda)
+    losses[i] <- log_loss(X_train, y_train, beta_path[i,], lambda)
+}
+plot(losses[3:n_iters], type="l")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+pred_train <- as.numeric(1 / (1 + exp(-X_train %*% beta_path[100,])))
+pred_test <- as.numeric(1 / (1 + exp(-X_test %*% beta_path[100,])))
+# all 1s/ 0s, all 1s /0s test, SGD train acc, SGD val acc
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+results["sgd",] <- c(mean(((pred_train > 0.5) * 1) == y_train), 
+                  auc1,
+                  mean(((pred_test > 0.5) * 1) == y_test),
+                  auc2)
+results
+```
+
+### Logistic Regression
+
+We now run a logistic regression using all variables, using the `glm` package.
+```{r message=FALSE, warning=FALSE, output=FALSE}
+glm2 <- glm(target~.,data=df_train, family=binomial(link="logit"),control = list(maxit = 100))
+display(glm2)
+```
+
+```{r glm-full-results}
+
+pred_train <- predict(glm2, df_train, type="response")
+glm2$xlevels = lapply(df[,cat_feats], levels)
+pred_test <- predict(glm2, df_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["glm-full",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+results
+anova(glm1, glm2, test="Chisq")
+```
+### Logistic + Ridge
+
+Given the issue of *high dimensionality*, we consider a regularised form of logistic regression. We use the `glmnet` package; in doing so we need to convert the data type into matrices.
+
+```{r message=FALSE, output=FALSE}
+X_train = df_train[, -length(df_train)]
+y_train <- df_train$target
+X_test = df_test[, -length(df_test)]
+y_test <- df_test$target
+X_train = model.matrix(~., X_train)
+X_test = model.matrix(~., X_test)
+
+
+glm3 <- cv.glmnet(X_train, y_train, family="binomial"(link="logit"), alpha=0)
+glm3
+```
+
+
+Test accuracy and ROC
+```{r}
+pred_train <- predict(glm3, X_train, type="response")
+pred_test <- predict(glm3, X_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["glm-ridge",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+results
+```
+
+### Nonlinear Fit (Tree-based)
+
+#### Random Forest
+```{r}
+dmy_train <- dummyVars("~.", data = df_train[,-length(df_train)])
+dmy_test <- dummyVars("~.", data = df_test[,-length(df_test)])
+X_train <- as.matrix(data.frame(predict(dmy_train,df_train)))
+X_test <- as.matrix(data.frame(predict(dmy_test,df_test)))
+```
+
+
+#### XGBoost
+```{r}
+
+dmy_train <- dummyVars("~.", data = df_train[,-length(df_train)])
+dmy_test <- dummyVars("~.", data = df_test[,-length(df_test)])
+X_train <- as.matrix(data.frame(predict(dmy_train,df_train)))
+X_test <- as.matrix(data.frame(predict(dmy_test,df_test)))
+y_train = as.integer(as.matrix(df_train$target))
+y_test = as.integer(as.matrix(df_test$target))
+bst <- xgboost(data = X_train, y_train, max_depth = 2, nround = 10, 
+               verbose=0,
+               objective='binary:logistic')
+
+pred_train <- predict(bst, X_train, type="response")
+pred_test <- predict(bst, X_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["xgb",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+```
+
+#### CatBoost
+
+```{r}
+
+# devtools::install_url('https://github.com/catboost/catboost/releases/download/v0.25.1/catboost-R-Darwin-0.25.1.tgz', INSTALL_opts = c("--no-multiarch", "--no-test-load"))
+
+X_train = df_train[,c(cat_feats, cont_feats)]
+y_train = as.integer(df_train$target)
+X_test = df_test[,c(cat_feats, cont_feats)]
+y_test = as.integer(df_test$target)
+
+pool <- catboost.load_pool(X_train, y_train, cat_features = cat_feats)
+model <- catboost.train(pool, params=list(depth = 8, iterations = 10, loss_function='Logloss', verbose=0))
+
+pred_train <- catboost.predict(model, catboost.load_pool(X_train), prediction_type = 'Probability')
+pred_test <- catboost.predict(model, catboost.load_pool(X_test), prediction_type = 'Probability')
+
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["catboost",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+results
+```
+
+
+```{r}
+
+lr_mod <-
+  logistic_reg() %>%
+  set_engine("glmnet")
+lr_fit <- lr_mod %>% fit(target ~., data=df_train)
+
+  
+# df_train <- recipe( ~ ., data = df_train)
+# df_train <- df_train %>% mutate(original = cat0)
+# ref_cell <- 
+#   df_train %>% 
+#   step_dummy(cat0) %>% df_train
+# 
+# df_train %>% mutate(across(starts_with("cat"), as.factor))
+# 
+# 
+# dummies <- rec %>%
+#   step_dummy(cat0) %>%
+#   prep(training = df_train)
+# 
+
+# 
+# df_train$target = as.factor(df_train$target)
+# 
+# rec <- recipe(target ~., data = df_train)
+# 
+# flights_wflow <- 
+#   workflow() %>% 
+#   add_model(lr_mod) %>% 
+#   add_recipe(rec)
+# 
+# flights_fit <- 
+#   flights_wflow %>% 
+#   fit(data = df_train)
+```
 ## Interpretation
 
+## Bibliography
+
+
++ Preprocessing - encode categorical variables+ 
++ Use small fold;
++ Implement SGD from scratch
++ Run GLM for 1 Var
++ Run GLM / Logistic Regression - all
++ Run GLM Ridge
++ Run Trees - small fold;
++ 
+
+https://www.kaggle.com/frankmollard/h2o-ml-ensemble
