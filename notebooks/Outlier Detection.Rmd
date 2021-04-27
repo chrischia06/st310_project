@@ -1,0 +1,155 @@
+---
+title: "Outlier Detection"
+author: "Mun Fai Chan"
+date: "4/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(pROC)
+```
+
+```{r}
+df <- read.csv(file = "train.csv")
+rownames(df) = df$id
+df = df[,-1] # remove id column
+# the first 19 columns are categorical 
+cat_feats = 1:19
+cont_feats <- 20:30
+df[,cat_feats] <- lapply(df[,cat_feats], as.factor)
+df$target <- as.factor(df$target)
+```
+
+```{r partition}
+# subsample the data for faster model imputation
+set.seed(1)
+sam = sample(1:nrow(df), 4000)
+df_sample = df[sam,]
+# Partition data into train and test; test will be our oos data
+set.seed(1)
+df_split <- initial_split(df_sample, prop = 3/4)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+```
+
+## Outlier Detection 
+
+```{r cont-viz}
+df %>% pivot_longer(cols = starts_with("cont"), names_to  = "cont") %>% 
+   ggplot(aes(x = value))+
+   geom_histogram(bins = 100, alpha = 0.85)+
+   ggtitle("Continuous features distribution")+
+   facet_wrap(cont~.,scales = "free")+
+   theme_minimal()
+```
+
+```{r cat-viz}
+df %>% pivot_longer(cols = contains(c("cat")), names_to  = "cat") %>% 
+   ggplot(aes(x = value))+
+   geom_bar(alpha = 0.85)+
+   ggtitle("Categorical features distribution")+
+   facet_wrap(cat~.,scales = "free")+
+   theme_minimal()
+```
+
+```{r cont-by-target}
+cont.stacked <- gather(data=df[, c(cont_feats, 31)],-target,key="var",value="value")
+p.cont <- ggplot(cont.stacked,aes(x=target,y=value),fill=factor(value)) + geom_boxplot() + coord_flip() + facet_wrap(~var, scales="free_x")
+p.cont
+```
+<Include this below bivariate EDA> 
+
+Based on the bivariate plots, it appears that there may outliers for cont10, cont7, cont8 and cont9. 
+
+Source: https://statsandr.com/blog/outliers-detection-in-r/
+```{r}
+hampel_filter <- function(df, column){
+   lower_bound <- median(df[[column]]) - 3 * mad(df[[column]], constant = 1)
+   upper_bound <- median(df[[column]]) + 3 * mad(df[[column]], constant = 1)
+   outlier_ind <- which(df[[column]] < lower_bound | df[[column]] > upper_bound)
+   return(outlier_ind)
+}
+
+percentile_filter <- function(df, column, lq = 0.001, uq = 0.999){
+   lower_bound <- quantile(df[[column]], lq)
+   upper_bound <- quantile(df[[column]], uq)
+   outlier_ind <- which(df[[column]] < lower_bound | df[[column]] > upper_bound)
+   return(outlier_ind)
+}
+
+hampel_filter(df_train, "cont10")
+hampel_filter(df_train, "cont7")
+hampel_filter(df_train, "cont8")
+hampel_filter(df_train, "cont9")
+
+percentile_filter(df_train, "cont10")
+percentile_filter(df_train, "cont7")
+percentile_filter(df_train, "cont8")
+percentile_filter(df_train, "cont9")
+
+#lapply(df_train[]) ?? can use lapply ?
+```
+
+## Modeling and Outlier Detection 
+< Include this in 3b> 
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4885900/
+
+```{r}
+# train-test
+X_train = as.matrix(df_train[,grepl("cont", colnames(df_train))])
+y_train = as.numeric(as.matrix(df_train$target))
+X_test = as.matrix(df_test[,grepl("cont", colnames(df_train))])
+y_test = as.numeric(as.matrix(df_test$target))
+results = data.frame(train_acc = max(1 - mean(y_train), mean(y_train)),
+                     train_auc = 0.5,
+                     test_acc = max(1 - mean(y_test), mean(y_test)),
+                     test_auc = 0.5,
+                     row.names=c("baseline")
+                     )
+results
+```
+
+
+```{r}
+library(car)
+```
+
+## 3b. Outlier Detection on Full GLM
+
+```{r message=FALSE, warning=FALSE, output=FALSE}
+glm2 <- glm(target~.,data=df_train, family=binomial(link="logit"),control = list(maxit = 100))
+display(glm2)
+```
+
+<include writeup on outliers> 
+```{r}
+outlierTest(glm2)
+outliers <- c(237902, 42246, 161748, 10904, 366457, 163799, 174648, 227135, 456668, 45158)
+```
+
+<Include writeup on leverage> 
+```{r}
+influenceIndexPlot(glm2, vars = "hat")
+```
+<Include writeup on influencers> 
+
+```{r}
+influencePlot(glm2)
+```
+
+```{r}
+influencers <- c(97904, 165420, 227237, 171847)
+#glm2_influencers <- update(glm2, subset = c(-influencers))
+#glm2_outliers <- update(glm2, subset = c(-outliers))
+removal_list <- union(outliers, influencers)
+glm2_removed <- update(glm2, subset = c(-removal_list))
+compareCoefs(glm2, glm2_influencers, glm2_outliers, glm2_removed)
+# actually just use glm2 and glm2_removed
+```
+
