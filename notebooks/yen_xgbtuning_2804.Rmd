@@ -1,0 +1,159 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+#### 5a) XGBoost
+
+Put table into matrices
+```{r}
+# convert data in matrices
+X_train = model.matrix(~., X_train)
+X_test = model.matrix(~., X_test)
+y_train=as.numeric(y_train)-1
+y_test=as.numeric(y_test)-1
+dtrain <- xgb.DMatrix(data = X_train,label = y_train)
+dtest <- xgb.DMatrix(data = X_test,label=y_test)
+```
+
+
+```{r}
+#library(xgboost)
+bst <- xgboost(dtrain, nrounds=10,
+               verbose=0,
+               objective='binary:logistic', eval_metric="auc")
+?xgboost
+
+pred_train <- predict(bst, X_train, type="response")
+pred_test <- predict(bst, X_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+
+results["xgb",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc2, test_auc=auc2)
+results
+```
+
+## 5b) tune XGBoost
+
+*Note: all the code in this section is referenced from Saraswat (2021).[https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/beginners-tutorial-on-xgboost-parameter-tuning-r/tutorial/]
+
+We decide to tune the following hyperparameters: nrounds, max_depth and min_child_weight. First, we run a cross-validation with nrounds=100 to find the best nrounds value. 
+```{r}
+#default parameters
+params <- list(booster = "gbtree", objective = "binary:logistic", eta=0.3,  gamma=0, max_depth=6, min_child_weight=1, subsample=1, colsample_bytree=1)
+
+# find best nround
+xgbcv <- xgb.cv( params = params, data = dtrain, nrounds=100, nfold = 5, showsd = T, stratified = T, print_every_n = 10, maximize = F, eval_metric = "auc")
+#ls(xgbcv)
+eval_log=xgbcv$evaluation_log
+eval_log[eval_log$test_auc_mean==max(eval_log$test_auc_mean)]
+```
+
+The 24th iteration has the highest test_auc_mean of 0.869. However, this value is averaged across all subsets of data used in the cross-validation. We proceed to run the model with nrounds=24 to plot the variance importance plot and calculate the true test accuracy and test AUC.
+```{r}
+xgb1 <- xgb.train (params = params, data = dtrain, nrounds = 24, watchlist = list(val=dtest,train=dtrain), print_every_n = 10, early_stopping_rounds = 10, maximize = F , eval_metric = "auc")
+```
+
+```{r}
+# variable importance plot
+varimp1 <- xgb.importance(feature_names = colnames(X_train),model = xgb1)
+xgb.plot.importance(importance_matrix = varimp1[1:20])
+#library(Ckmeans.1d.dp)
+gg <- xgb.ggplot.importance(varimp1, measure="Frequency", rel_to_first = T)+ylab("Frequency")
+gg
+```
+The plot above shows that all of the continuous variables have the highest feature importance in the XGBoost model, and the most important categorical variables are cat14, cat0 and cat18. 
+
+```{r}
+# model prediction
+pred_train <- predict(xgb1, X_train, type="response")
+pred_test <- predict(xgb1, X_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+results["xgb1",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc_xgb1, test_auc=auc2)
+results
+```
+
+The results show that setting nrounds=24 did not give a better test accuracy or AUC than the initial model with nrounds=10. We proceed with nrounds=10 to tune the other parameters using the MLR package.
+
+First, we need create tasks and convert the predictors into dummy variables with one-hot encoding.
+
+```{r}
+#library(mlr)
+#library(Ckmeans.1d.dp)
+
+#create tasks
+traintask <- makeClassifTask (data = df_train,target = "target")
+testtask <- makeClassifTask (data = df_test,target = "target")
+
+#do one hot encoding
+traintask <- createDummyFeatures(obj = traintask)
+testtask <- createDummyFeatures(obj = testtask)
+```
+
+Next, we create the learner, setting the predict type=prob so that AUC can be evaluated. We set nrounds and eta to its default values, set the range of the parameters to be tuned, and set the resampling strategy to stratify=T to ensure that the distribution of the outcome is preserved across resampled datasets (Sarawat, 2021). 
+```{r}
+#create learner
+lrn <- makeLearner("classif.xgboost",predict.type = "prob")
+lrn$par.vals <- list( objective="binary:logistic", eval_metric="auc", nrounds=10, eta=0.3)
+
+#set parameter space
+params <- makeParamSet( makeDiscreteParam("booster",values = "gbtree"), makeIntegerParam("max_depth",lower = 3L,upper = 10L), makeNumericParam("min_child_weight",lower = 1L,upper = 10L), makeNumericParam("subsample",lower = 0.5,upper = 1), makeNumericParam("colsample_bytree",lower = 0.5,upper = 1))
+
+#set resampling strategy
+rdesc <- makeResampleDesc("CV",stratify = T,iters=5L)
+```
+
+Using random search, we set the control to build 10 models for each combination of parameters, and choose the one with the highest AUC.
+```{r}
+#search strategy
+ctrl <- makeTuneControlRandom(maxit = 10L)
+```
+
+We also set a parallel backend for faster computation, as without it the models took hours to tune.
+```{r}
+#set parallel backend
+library(parallel)
+library(parallelMap) 
+parallelStartSocket(cpus = detectCores())
+
+#parameter tuning
+mytune <- tuneParams(learner = lrn, task = traintask, resampling = rdesc, measures = auc, par.set = params, control = ctrl, show.info = T)
+mytune$y 
+mytune$x
+```
+
+The resulting mean test AUC is 0.866. Finally, we use the tuned hyperparameters to train the final model and evaluate it.
+```{r}
+xgb2 <- xgb.train(data = dtrain, nrounds = 10, watchlist = list(val=dtest,train=dtrain),
+                  print_every_n = 10, early_stopping_rounds = 10, maximize = F , 
+                  eval_metric = "auc", max_depth=4, min_child_weight=7.418996,
+                  subsample=0.6211761, colsample_by_tree=0.6679513)
+# model prediction
+pred_train <- predict(xgb2, X_train, type="response")
+pred_test <- predict(xgb2, X_test, type="response")
+pred_classes_train <- ifelse(pred_train > 0.5, 1,0)
+pred_classes_test <- ifelse(pred_test > 0.5, 1,0)
+acc1=mean(pred_classes_train == df_train$target)
+roc1=roc(df_train$target, pred_train)
+auc1=auc(roc1)
+acc2=mean(pred_classes_test == df_test$target)
+roc2=roc(df_test$target, pred_test)
+auc2=auc(roc2)
+results["xgb2",] <- data.frame(train_acc=acc1, train_auc=auc1, test_acc = acc_xgb1, test_auc=auc2)
+results
+```
+
+The tuned model does not have a higher test accuracy or test AUC than the default model.
