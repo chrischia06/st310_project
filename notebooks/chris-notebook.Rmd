@@ -94,9 +94,9 @@ references:
 
 - id: GDPR
   title: Data Protection Impact Assessment and the GDPR
-  author: 
+  author: IT Governance Ltd.
   issued:
-    year: 
+    year: 2021
   URL: “https://www.itgovernance.co.uk/privacy-impact-assessment-pia”
 
 - id: outlier
@@ -137,6 +137,30 @@ references:
   issued:
     year: 2017
   URL: “https://arxiv.org/abs/1705.07874”
+- id: rbloggers2020catboost
+  title: "How to Use Catboost with Tidymodels"
+  author: "Roel M. Hogervorst"
+  issued:
+    year: 2020
+  URL: “https://www.r-bloggers.com/2020/08/how-to-use-catboost-with-tidymodels/”
+- id: silge2020rf
+  title: "Tuning random forest hyperparameters with #TidyTuesday trees data"
+  author: "Julia Silge"
+  issued:
+    year: 2020
+  URL: “https://juliasilge.com/blog/sf-trees-random-tuning/”
+- id: silge2020xgb
+  title: "Tune XGBoost with tidymodels and #TidyTuesday beach volleyball"
+  author: "Julia Silge"
+  issued:
+    year: 2020
+  URL: “https://juliasilge.com/blog/xgboost-tune-volleyball/”
+- id: kuhn2021
+  title: "Tidy Modeling with R"
+  author: "Julia Silge"
+  issued:
+    year: 2021
+  URL: “https://www.tmwr.org/”
 ---
 
 # ST310 Course Project
@@ -190,7 +214,7 @@ We remove the first column `id`, which represents an unique identifier for each 
 
 **Remark**: Different models would require different preprocessing for the categorical variables, and thus we will further address in subsequent sections; for example the `glm` package can accept *factors* as a data type, whereas for `glmnet` they must be converted to the model.matrix format.
 
-**Remark**: When encoding the categorical variables as dummy variables in our subsequent analysis, we find that there are over 600 unique categories across all 19 of the categorical variables.  We could also consider different methods to process categorical variables, such as merging less frequently occurring categories, or  *target encoding* [@parr2019moml, ch. 6]. Nonetheless, we stick with the factors and dummies approach given our lack of familiarity with these other methods.
+**Remark**: When encoding the categorical variables as dummy variables in our subsequent analysis, we find that there are over 600 unique categories across all 19 of the categorical variables.  We could also consider different methods to process categorical variables, such as merging less frequently occurring categories, or  *target encoding* [@parr2019moml, ch. 6]. Nonetheless, in our analaysis we primarily use the factors / dummies approach to encoding categorical variables.
 
 ### Feature Engineering
 
@@ -313,7 +337,7 @@ cor_with_target %>%
 
 We can use Principal Components Analysis (PCA) as a means to visualise the data in low-dimension, and examine whether there are any explicitly discernible trends. We apply PCA to all the continuous features, without further pre-scaling is required given the continuous features have values from $[0, 1]$.  By eye, there do not appear to be any significant difference in the PCA representations for each class, although there are many observations with `target == 1` closer to the bottom of the ellipsoid formed by the first two PCA loadings. At least in the space formed by the first two princial components, the classes do not appear to be linearly separable,  - which suggest a non-linear method may be more effective on this classification task. 
 
-On examination of the *cumulative explained variance ratio*, the variation in $\mathbf{X}$ captured by $k$ principal components, we find that the  first two principal components only capture about $\approx 60\%$ variation in the *continuous variables*. To capture $\approx 90\%$ of the variation, we would need 6 of the continuous features, and for $\approx 95\%$ we would need 9. This could suggest that including more features could be beneficial, which would be a concern if we are to do  *feature selection*.
+On examination of the *cumulative explained variance ratio*, the variation between the continuous features $\mathbf{X}$ captured by $k$ principal components, we find that the  first two principal components only capture about $\approx 60\%$ variation in the *continuous variables*. To capture $\approx 90\%$ of the variation, we would need 6 of the continuous features, and for $\approx 95\%$ we would need 9. This could suggest that including more features could be beneficial, which would be a concern if we are to do  *feature selection*.
 
 ```{r pca-viz}
 # pca loadings
@@ -548,13 +572,17 @@ print(cnf)
 rocs <- roc.glmnet(glm_reg, newx=X_test, newy=y_test)
 qplot(rocs$FPR, rocs$TPR) + ggtitle("ROC Curve") + xlab("FPR") + ylab("TPR")
 ```
-We set `alpha = 0` for ridge. The cross-validated regularised logistic regression via `glmnet` identifies the optimal level of regularisation $\lambda$, that minimises in this case binomial deviance (by default using `nfolds=10`). In this case the optimal $log(\lambda)$ appears to be around $-2$.
+We set `alpha = 0` for ridge. The cross-validated regularised logistic regression via `glmnet` identifies the optimal level of regularisation $\lambda$, that minimises in this case binomial deviance (by default using `nfolds=10`). In this case the optimal $log(\lambda)$ appears to be around $-2$. We should note that the inclusion of the penalty term $\lambda$ ensures that there is a solution exists [@hastie2009elements, pp. 61-68], although the coefficients will be *biased*.
 
-**Remark**: For further exploration we could consider using a $L^{1}$ penalty (lasso) and both the $L^{1}$ and $L^{2}$ penalty terms (ElasticNet) by adjusting the alpha parameter. A $L^{1}$ penatly (Lasso) would have the effect of shrinking some coefficients to $0$, instead of near $0$ as in ridge, which introduces sparsity and lends itself for feature selection.
+**Remark**: For further exploration we could consider using a $L^{1}$ penalty (lasso) and both the $L^{1}$ and $L^{2}$ penalty terms (ElasticNet) by adjusting the alpha parameter. A $L^{1}$ penalty (Lasso) would have the effect of shrinking some coefficients to $0$, instead of near $0$ as in ridge, which introduces sparsity and lends itself for feature selection.
+
+Thus far we have examined the use of (regularised) general linear models, specifically logistic regression. We have seen that for this specific modelling problem, it is possible to attain a fair improvement upon naive predictions and simple baselines, and that they are relatively interpretable. We can interpret logistic regression via the coefficients, with the interpretation being a linear association between the log odds of $\beta_{i}$ as one unit of the predictor $x_{i}$, assuming there are no issues with multicollinearity. In this setting, we are very explicitly aware of how the model generates its prediction.
 
 ### Random Forest
 
-To improve performance, we draw on the usage of non-linear tree-based models, specifically random forests[@breiman2016randomforests]. Intuitively, a random forest averages different decision trees (known as bagging) so as to reduce the variance of individual trees. This thus reduces the likelihood of individual trees overfitting to the training data.
+We now examine whether predictive performance can be improved by using *non-linear* methods, specifically tree-based models such as random forests.  We give a brief definition of decision trees: intuitively decision trees learn a set of “rules” for prediction by partitioning the feature space. As a simple example consider $\hat{y} = 0.5(x_{1} > 1)$, i.e. predict $0.5$ if $x_{1}$ is greater than 1.  
+
+Intuitively, a random forest is an average of  different decision trees, with each decision tree in the forest being exposed to only a *subset* of features (known as bootstrap aggregation of  *bagging*). This has the effect of reducing the likelihood of individual trees overfitting to the training data and the variance of the individual trees. Anecdotally, this is similar to taking the "wisdom of the crowds" (i.e. ensembling). For more details, refer to [@breiman2016randomforests] and [@hastie2009elements, pp. 587-604].
 
 We use the `tidymodels` package with the `ranger` backend to fit a Random Forest with hyperparameter tuning. We focus on two key parameters: `min_n`, the number of features subsampled by each decision tree, and `mtry`, the number of variables used for splitting at each node. Both of these hyperparameters influence *model complexity* and have the effect of *regularising the model*.
 
@@ -635,9 +663,9 @@ Finally, for model interpretability we can inspect the Random Forest model predi
 
 ### XGBoost
 
-For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. Gradient Boosted Decision Trees. The XGBoost package, introduced in [@chen2016xgboost] is a variant of Gradient Boosted Decision Trees [@hastie2009elements, pp. 353-374]. For Gradient Boosting Trees, each decision tree is trained sequentially on the *residuals* of the previous decision tree, which has the effect of reducing bias, and the overall prediction is a linear combination of these individual decision trees. 
+For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. The XGBoost package, introduced in [@chen2016xgboost] is a variant of Gradient Boosted Decision Trees [@hastie2009elements, pp. 353-374]. For Gradient Boosting Trees, each decision tree is trained sequentially on the *residuals* of the previous decision tree, which has the effect of reducing bias, and the overall prediction is a linear combination of these individual decision trees.    
 
-Similar to Random Forests, the hyperparameters influence the *model complexity*. In this case we focus on two key hyperparameters: the maximum depth of each tree `max_depth`, and the `learning_rate`.  We keep the the number of trees or “boosting rounds” fixed `nround = 100` for faster training, although this could be a hyperparameter to tune as well.
+Similar to Random Forests, the hyperparameters influence the *model complexity* of the GBDT. In this case we focus on two key hyperparameters: the maximum depth of each tree `max_depth`, and the `learning_rate`.  We keep the the number of trees or “boosting rounds” fixed `nround = 100` for faster training, although this could be a hyperparameter to tune as well.
 
 
 ```{r xgb, message=FALSE, warning=FALSE}
@@ -660,9 +688,9 @@ xgboost::xgb.ggplot.shap.summary(X_test, model = bst,
                                  target_class = 1, top_n = 20)  # Summary plot
 ```
 
-We obtain a test accuracy of $0.827$ and test AUC of $0.8627$. In this case, for our particular selection of parameters the model may be underfit.
+We obtain a test accuracy of $0.827$ and test AUC of $0.8627$. In this case, our train and test statistics seem comparable, although it is likely that further improvements can be made by further hyperparameter tuning.
 
-For interpretability we can use *Feature Importances*. In the case of XGBoost, the default feature importance is the *gain*, the contribution of the feature to the prediction. We can also use to *Shapley Values* [@lundberg2017unified], which capture how each feature contributes to each prediction. From the Shapley Value plot, we can see that higher values of `cat16B` (which would imply that `cat16 == B`) is associated with a greater Shapley Value and impact on the prediction.
+For model interpretability we can use *Feature Importances*. In the case of XGBoost, the default feature importance is the *gain*, which measures the contribution of the feature to the prediction. We can also use to *Shapley Values* [@lundberg2017unified], another means of capturing how each feature contributes to each prediction which relies on concepts from *game theory*. As an example, from the Shapley Value plot, we can see that higher values of `cat16B` (which would imply that `cat16 == B`) is associated with a greater Shapley Value and impact on the prediction.
 
 ### CatBoost
 
@@ -740,9 +768,9 @@ results["catboost",] <- evaluate_metrics(pred_train, pred_test, df_train$target,
 results["catboost",]
 ```
 
-We obtain a train accuracy of $0.766$ and a train AUC of $0.866$, versus a test accuracy of $0.753	$ and test AUC $0.871$. Interestingly, this suggests that the model may be underfitting for our particular choice of parameters (and also for our subsampled dataset size), and it is possible that further optimisations can be done.
+We obtain a train accuracy of $0.766$ and a train AUC of $0.866$, versus a test accuracy of $0.753	$ and test AUC $0.871$, and the train and test statistics are similar. From our hyperparameter tuning graph, it appears as if increasing `tree_depth` and the `learning_rate` do not really impact accuracy, but increasing either improves AUC. However, this could be an error or consuquence from using only 3 cross-validation folds, or using a small subsample of the larger dataset. It is possible that further hyperparameter tuning can be done to improve predictive performance.
 
-For interpretability, we can use CatBoost's *feature importance*. From the [CatBoost documentation](#https://catboost.ai/docs/concepts/fstr.html), CatBoost's in-built and default feature importance does the following:
+For model interpretability, we can use CatBoost's *feature importance*. From the [CatBoost documentation](#https://catboost.ai/docs/concepts/fstr.html), CatBoost's in-built and default feature importance does the following:
 
 > For each feature, PredictionValuesChange shows how much on average the prediction changes if the feature value changes. The bigger the value of the importance the bigger on average is the change to the prediction value, if this feature is changed.
 
@@ -761,9 +789,11 @@ Interestingly, we also observe a high degree of overfitting by the more complex 
 Furthermore, although the tree-based methods are less interpretable and more “black box” to some extent, we can make use of model interpretability techniques. In addition, it could be that our results are not fully robust, given we have subsampled the original data. Complex models tend to do better when the number of observations is large; hence, it is plausible that these will perform better if we use the entire data set. 
 
 ## Conclusion
-In this project, we demonstrated the use of logistic regression, gradient descent, regularisation, random forest, gradient boosting and hyperparameter tuning techniques to achieve interpretability and model accuracy (in separate cases) in predicting the amount of an insurance claim. From the models we explored, regularised logistic regression was the model with highest AUC, which suggests that a relatively interpretable model can also have a fair predictive performance. Nonetheless, in comparison with, our baseline model with only a few predictors, the regularised logistic regression is more difficult to interpret given the large number of predictors (when all levels of the categorical variable are considered). On the other hand, it is possible that a higher predictive performance could be attained by further fine-tuning a non-linear, less interpretable model, for example using a **deep neural network**. As a short remark, the winners of this contest made use of a *denoising auto-encoder* architecture (see [here](#https://www.kaggle.com/c/tabular-playground-series-mar-2021/discussion/229833). In practice, depending on whether the goals of the company lean towards prediction or explanation, an appropriate trade-off between model complexity and interpretability has to be chosen. 
+In this project, we explored the use of logistic regression, gradient descent, regularisation, random forest, gradient boosting and hyperparameter tuning techniques. We compared and constrated the various models in terms of their performances in terms of AUC and accuracy,  and their relative interpretability. From the models we explored, regularised logistic regression was the model with highest AUC, which suggests that a relatively interpretable model can also attain a fair amount of predictive performance, particularly when computational effort is considered.
 
-From the insurer’s profit perspective, understanding which characteristics are highly correlated with large amounts of claims could also be used to inform whether or not a particular insurance application is accepted, even if causality cannot be inferred. However, this might lead to some legal and/or ethical issues. For example, the UK’s 2010 Equality Act makes discriminating on nine protected characteristics, including age, gender, race and religion, illegal [@bias2020]. Therefore, proper data governance needs to be maintained and privacy impact assessments need to be conducted before any machine learning models of this kind are deployed in industry [@GDPR].
+On the other hand, it is possible that a higher predictive performance could be attained by further fine-tuning a non-linear, less interpretable model, for example using a **deep neural network**.  We note that the winners of this contest made use of a *denoising auto-encoder* architecture (see [here](#https://www.kaggle.com/c/tabular-playground-series-mar-2021/discussion/229833), which could be a potential avenue for further exploration. In practice, depending on whether the goals of the company lean towards prediction or explanation, an appropriate trade-off between model complexity and predictive performance vs interpretability has to be chosen. 
+
+From the insurer’s profit perspective, understanding which characteristics are highly correlated with large amounts of claims could also be used to inform whether or not a particular insurance application is accepted, even if causality cannot be inferred. We should note that despite the  the regularised logistic regression being relatively interpretable, it is still relatively difficult to interpret, given the large number of predictors (when all levels of the categorical variable are considered), compared to our baseline model with few predictors This leads into discussion of the legal and ethical aspects of machine learning. For example, the UK’s 2010 Equality Act makes discriminating on nine protected characteristics, including age, gender, race and religion, illegal [@bias2020]. Therefore, proper data governance needs to be maintained and privacy impact assessments need to be conducted before any machine learning models of this kind are deployed in industry [@GDPR].
 
 
 
@@ -777,6 +807,8 @@ From the insurer’s profit perspective, understanding which characteristics are
 ## Appendix
 
 ### Comparison of Coefficients with Outliers Removed
+
+We investigate the impact of removing outliers (based on those identified by our logistic regression specification) on the coefficients. We find that there is no signiica
 
 ```{r removed-outliers}
 influencers <- as.numeric(rownames(influencePlot(glm_full)))
@@ -805,3 +837,53 @@ results["glm-merged-cats",] <- evaluate_metrics(pred_train, pred_test, df_train$
 results["glm-merged-cats",]
 ```
 
+### XGBoost Hyperpameter Tuning
+
+**Remark**: We were unable to get the inbuilt `xgb.ggplot.shap.summary` to work with `tidymodels`.
+
+```{r}
+set.seed(2021)
+xgb_spec <- boost_tree(
+  trees = 100,
+  tree_depth = tune(),
+  learn_rate = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("xgboost", objective='binary:logistic', eval_metric="logloss")
+
+tune_wf <- workflow() %>%
+  add_formula(target~.) %>%
+  add_model(xgb_spec)
+
+# Hyperparameter Tuning
+set.seed(234)
+trees_folds <- vfold_cv(df_train, strata = target, v = 3)
+doParallel::registerDoParallel()
+set.seed(345)
+tune_res <- tune_grid(
+  tune_wf,
+  resamples = trees_folds,
+  grid = 2
+)
+
+autoplot(tune_res)
+# fit best model from hyperparameters
+best_auc <- select_best(tune_res, "roc_auc")
+final_xgb <- finalize_model(
+  xgb_spec,
+  best_auc
+)
+final_wf <- workflow() %>%
+  add_formula(target ~.) %>%
+  add_model(final_xgb)
+
+xgb1 <- fit(final_wf, df_train)
+xgb2 <- pull_workflow_fit(xgb1)$fit
+
+pred_train <- unlist(predict(xgb1,df_train, type='prob')[,2])
+pred_test <- unlist(predict(xgb1, df_test, type='prob')[,2])
+results["xgb",] <- evaluate_metrics(pred_train, pred_test, df_train$target, df_test$target)
+
+importance_matrix <- xgb.importance(model=xgb2)
+xgb.plot.importance(importance_matrix)
+```
