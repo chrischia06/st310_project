@@ -18,74 +18,132 @@ header-includes:
 references:
 - id: hastie2009elements
   title: 'The Elements of Statistical Learning: Data Mining, Inference, and Prediction'
-  author: "Hastie, Trevor and Tibshirani, Robert and Friedman, Jerome"
+  author: Hastie, T. and Tibshirani, R. and Friedman, J.H.
   publisher: Springer
   type: book
   issued:
     year: 2009
 - id: james2017introduction
   title: "An Introduction To Statistical Learning"
-  author: "James, Gareth and Witten, Daniela and Hastie, Trevor and Robert Tibshirani"
+  author: James, Gareth, Daniela Witten, Trevor Hastie, and Robert Tibshirani
   publisher: Springer
-  type: book
   issued:
     year: 2017
 - id: efron2016computer
   title: "Computer Age Statistical Inference"
-  author: "Efron, Bradley and Hastie, Trevor"
+  author: Efron, Bradley and Hastie, Trevor
   publisher: Cambridge University Press
-  type: book
   issued:
     year: 2016
 - id: molnar2019
   title: "Interpretable Machine Learning"
-  author: "Molnar, Christoph"
-  type: book
+  author: Christoph Molnar
   issued:
     year: 2019
   URL: “https://christophm.github.io/interpretable-ml-book”
 - id: murphy2012machine
   title: "Machine Learning: A Probabilistic Perspective"
-  author: "Murphy, Kevin P."
+  author: Murphy, Kevin P
   publisher: MIT Press
-  type: book
   issued:
     year: 2012
   URL: "https://christophm.github.io/interpretable-ml-book"
 - id: prokhorenkova2017catboost
   title: "CatBoost: Unbiased Boosting With Categorical Features"
-  type: article-journal
-  author: "Prokhorenkova, Liudmila and Gusev, Gleb and Vorobev, Aleksandr and Dorogush, Anna Veronika and Gulin, Andrey"
+  author: Prokhorenkova, Liudmila and Gusev, Gleb and Vorobev, Aleksandr and Dorogush, Anna Veronika and Gulin, Andrey
   issued:
     year: 2017
   URL: "https://arxiv.org/pdf/1706.09516.pdf"
 - id: chen2016xgboost
   title: "XGBoost: A Scalable Tree Boosting System"
-  author: "Chen, Tianqi and Guestrin, Carlos"
-  type: article-journal
+  author: Chen, Tianqi and Guestrin, Carlos
   issued:
     year: 2016
   URL: "https://arxiv.org/pdf/1603.02754.pdf"
+
+- id: 
+  title: ‘VARIABLE IMPORTANCE PLOT’ AND VARIABLE SELECTION
+
+  author: Arthur Charpentier
+  issued:
+    year: 2015
+  URL: “https://freakonometrics.hypotheses.org/19835”
+- id: chen2016xgboost
+  title: "XGBoost: A Scalable Tree Boosting System"
+  author: Chen, Tianqi and Guestrin, Carlos
+  issued:
+    year: 2016
 - id: parr2019moml
   title: "The Mechanics of Machine Learning"
   author: "Parr, Terence and Howard, Jeremy"
   type: book
   issued:
     year: 2019
-  URL: "https://mlbook.explained.ai/"
 - id: vishnoi2020optimisation
   title: "Algorithms for Convex Optimization"
   author: "Nisheeth K. Vishnoi"
   type: book
   issued:
     year: 2020
-  URL: "https://convex-optimization.github.io/"
 - id: breiman2016randomforests
   title: "Random Forests"
   author: Leo Breiman
   issued:
     year: 2001
   URL: "https://link.springer.com/content/pdf/10.1023/A:1010933404324.pdf"
+
+- id: collinearitycambridge
+  title: Collinearity
+  author: Peter Watson 
+  issued:
+    year: 2015
+  URL: “https://imaging.mrc-cbu.cam.ac.uk/statswiki/FAQ/Collinearity”
+
+- id: GDPR
+  title: Data Protection Impact Assessment and the GDPR
+  author: 
+  issued:
+    year: 
+  URL: “https://www.itgovernance.co.uk/privacy-impact-assessment-pia”
+
+- id: outlier
+  title: Outliers Detection in R
+  author: Antoine Soetewey
+  issued:
+    year: 2020
+  URL: “https://statsandr.com/blog/outliers-detection-in-r/”
+
+- id: xgboosttutorial
+  title: Beginners Tutorial on XGBoost and Parameter Tuning in R
+  author: Manish Sarawat
+  URL: “https://www.hackerearth.com/practice/machine-learning/machine-learning-algorithms/beginners-tutorial-on-xgboost-parameter-tuning-r/tutorial”
+
+- id: ridgereg2018
+  title: "Ridge Regression and Multicollinearity: An in-depth review"
+  author: Deanna Schreiber-Gregory
+  issued:
+    year: 2018
+  URL: “https://www.sas.com/content/dam/SAS/support/en/sas-global-forum-proceedings/2018/2825-2018.pdf”
+
+- id: bias2020
+  title: "Bias in algorithmic decision-making: recommendations from the UK’s Centre for Data Ethics and Innovation"
+  author: Shini Pattni 
+  issued:
+    year: 2020
+  URL: “https://digital.freshfields.com/post/102gm0v/bias-in-algorithmic-decision-making-recommendations-from-the-uks-centre-for-dat”
+
+- id: tidymodels_rebeccabarter
+  title: "Tidy Models: tidy machine learning in R"
+  author: Rebecca Barter 
+  issued:
+    year: 2020
+  URL: “http://www.rebeccabarter.com/blog/2020-03-25_machine_learning/”
+- id: lundberg2017unified
+  title: "A Unified Approach to Interpreting Model Predictions"
+  author: "Lundberg, Scott and Lee, Su-In"
+  issued:
+    year: 2017
+  URL: “https://arxiv.org/abs/1705.07874”
 ---
 
 # ST310 Course Project
@@ -131,7 +189,7 @@ library(pdp)
 df <- read.csv(file = "../data/train.csv")
 cat(c("The dimensions of the array are :", dim(df)[1], ", ", dim(df)[2]))
 ```
-The dataset consists of 30 features,  19 *categorical variables* and 11 numerical variables, and a binary outcome variable `target`. We will need to process these categorical variables in some manner, which we shall consider in the [subsequent section](#preprocessing).
+The dataset consists of 30 features,  19 *categorical variables* and 11 numerical variables, and a binary outcome variable `target`. 73.5% of the observations have `target==1`, suggesting an *imbalanced dataset*. We will need to process these categorical variables in some manner, which we shall consider in [subsequent sections](#preprocessing).
 
 ## Preprocessing
 We remove the first column `id`, which represents an unique identifier for each observation. We then convert the first 19 columns, which are categorical variables into the *factor* data type in R. Given computational limitations (the code is executed on single CPU laptops), we subsample `n_train = 4000` observations from the complete dataset of 300,000 observations. For our subsequent analysis, we will use only this subsample of 4000 observations, although the approaches can be naturally extended to a larger dataset given greater computational resources.  We further partition the 4000 observations, into a train set of 3000 observations and a test set of  1000 observations. All training and tuning are performed on the training data, and we will consider model performance on the test set performance scores.
@@ -261,7 +319,7 @@ cor_with_target %>%
 
 We can use Principal Components Analysis (PCA) as a means to visualise the data in low-dimension, and examine whether there are any explicitly discernible trends. We apply PCA to all the continuous features, without further pre-scaling is required given the continuous features have values from $[0, 1]$.  By eye, there do not appear to be any significant difference in the PCA representations for each class, although there are many observations with `target == 1` closer to the bottom of the ellipsoid formed by the first two PCA loadings. At least in the space formed by the first two princial components, the classes do not appear to be linearly separable,  - which suggest a non-linear method may be more effective on this classification task. 
 
-On examination of the *cumulative explained variance ratio*, the variation in $\mathbf{X}$ captured by $k$ principal components, we find that the  first two principal components only capture about $\approx 60\%$ variation in the *continuous variables*. To capture $\approx 90\%$ of the variation, we would need 6 of the continuous features, and for $\approx 95\% we would need 9. This could suggest that including more features could be beneficial, which would be a concern if we are to do  *feature selection*.
+On examination of the *cumulative explained variance ratio*, the variation in $\mathbf{X}$ captured by $k$ principal components, we find that the  first two principal components only capture about $\approx 60\%$ variation in the *continuous variables*. To capture $\approx 90\%$ of the variation, we would need 6 of the continuous features, and for $\approx 95\%$ we would need 9. This could suggest that including more features could be beneficial, which would be a concern if we are to do  *feature selection*.
 
 ```{r pca-viz}
 # pca loadings
@@ -315,7 +373,7 @@ results
 
 ### Logistic Regression (SGD)
 
-To fulfill the project requirements, we implement a `from scratch' Stochastic Gradient Descent routine  for Logistic Regression. The derivation follows [@hastie2009elements, pp. 120-126]
+To fulfill the [project requirements](#https://joshualoftus.com/ml4ds/08-nonlinear/exercises/project_outline.html), we implement a `from scratch' Stochastic Gradient Descent routine  for Logistic Regression. The derivation follows [@hastie2009elements, pp. 120-126]
 
 Consider a matrix of variables $X = (x_{1}, x_{2}, \ldots x_{n})^{T}$, where $x_{i}$ denote the i-th row or observation, the target $\mathbf{y} = (y_{1}, y_{2}, \ldots, y_{n})$. Let $\frac{p(x_{i}; \beta)}{1 - p(x_{i} ; \beta)} = exp(\beta^{T} x_{i})$  denote the odds ratio.
 
@@ -423,14 +481,14 @@ This suggests that claims with `cat13=B` have $exp(1.8681)-1=5.48$ higher odds t
 
 To interpret the coefficients of the continuous variables, log odds need to be calculated using specific pairs of values of the predictors. The non-linearity of the logistic function means that a change of one unit in the value of a predictor is not the same across the range of the predictor. `cont3` and `cont4` have negative coefficients as expected, and are interpreted as follows. A one unit increase in `cont3` is associated with an $exp(-0.6554)=0.519$ multiplicative effect on the odds, i.e. a 48% decrease in odds compared to the previous odds. Similarly, a claim with a one unit higher value of ‘cont4’ is $1 - exp(-0.4772)=37.9\%$ less likely to have `target==1` than a claim with a one unit lower value of `cont4`. As the true range of each continuous variable before normalisation is unknown, it is unclear whether this associated change in target is considered large in reality.
 
-```{r message=FALSE, warning=FALSE}
+```{r glm-base-res, message=FALSE, warning=FALSE}
 pred_train <- predict(glm_base, df_train, type="response")
 pred_test <- predict(glm_base, df_test, type="response")
 results["glm-base",] <- evaluate_metrics(pred_train, pred_test, df_train$target, df_test$target)
 results["glm-base",]
 ```
 
-With just a few predictors, the baseline model has a test accuracy of $80.3\%$, which is $7.5\%$ higher than the test accuracy of the naive model. The test AUC of the baseline model is $0.703$, which is 0.203 higher than that of the naive model, which is a fair improvement.
+With just a few predictors, the baseline model has a test accuracy of $80.3\%$, which is $7.5\%$ higher than the test accuracy of the naive model. The test AUC of the baseline model is $0.703$, which is 0.203 higher than that of the naive model, which is a fair improvement. However, we note that the Logistic Regression using SGD and all continuous features attained a higher test accuracy - this could suggest that there are potential gains from using all features.
 
 ### Logistic Regression (All Predictors)
 
@@ -447,9 +505,9 @@ results["glm-full",] <- evaluate_metrics(pred_train, pred_test, df_train$target,
 results["glm-full",]
 ```
 
-The full model has a higher train accuracy (0.801) but lower test accuracy (0.59) than the baseline model, which implies overfitting. The test AUC is 0.543, which is much lower than the baseline. This is an example of the bias-variance trade-off; the more complex, full model with 31 predictors has a lower bias but higher variance than the simpler, baseline model with 4 predictors. 
+The full model has a higher train accuracy (0.801) but lower test accuracy (0.59) than the baseline model,and the test AUC is 0.543, lower than our baseline. This may be indicative of overfitting, and an example of the bias-variance trade-off; the more complex, full model with 31 predictors has a lower bias but higher variance than the simpler, baseline model with 4 predictors. 
 
-We also obtain an error: “prediction from a rank-deficient fit may be misleading” which suggests multicollinearity. In subsequent sections, we aim to overcome this to improve the stability of our model using shrinkage in a [subsequent section](#regularised-logistic-regression).
+We also obtain the errors: “prediction from a rank-deficient fit may be misleading” which and “glm.fit: algorithm did not converge”, which may be indicative of multicollinearity. This is likely due to the inclusion of all the categorical variables; with over 600 levels for all the categorical variables it is likely that they are collinear in some way. In subsequent sections, we aim to overcome this to improve the stability of our model using shrinkage in a [subsequent section](#regularised-logistic-regression).
 
 ### Outlier Detection
 At this stage, we suspect that some outliers might be heavily influencing the performance of our models, and hence we seek to detect outliers using a few measures. Formally, outliers are defined as observations with a response vector that is unusual conditional on covariates (predictors). Firstly, we look for points with large (studentised) residuals. We can then test if these residuals are significantly larger than those of other points by examining the Bonferroni-adjusted p-values. Ten points are identified to have large studentised residuals with adjust p-values less than 0.05. We store the indices of these points to be removed later.
@@ -474,22 +532,31 @@ We find that removing outliers (see [Appendix](#appendix)) leads to a higher tes
 
 ### Regularised Logistic Regression
 
-Given the issue of *high dimensionality*, we consider a regularised form of logistic regression. Specifically, we consider ridge (logistic) regression, with the functional form as in [equation (2)](#logistic-regression-\(sgd\)) This method shrinks coefficients by imposing a penalty on their size, thereby reducing model complexity.  We use the implementation offered by the  `glmnet` package; in doing so we need to convert the data type into matrices.The `glmnet` package requires the data to be in a *matrix* data type, and hence we make the corresponding adjustment.
+Given the issue of *high dimensionality* and multicollinearity, we consider a regularised form of logistic regression. Specifically, we consider ridge (logistic) regression, with the functional form as in [equation (2)](#Logistic_Regression_(SGD)). This method shrinks coefficients by imposing a penalty on their size, in this case a $L^{2}$ (ridge) penalty, thereby reducing model complexity.  We use the implementation offered by the  `glmnet` package; in doing so we need to convert the data type into matrices.The `glmnet` package requires the data to be in a *matrix* data type, and hence we make the corresponding adjustment.
 
 ```{r glm-ridge-scores, message=FALSE, warning=FALSE}
-X_train = df_train[, -length(df_train)]
+X_train = model.matrix(~., df_train[, -length(df_train)])
 y_train <- df_train$target
-X_test = df_test[, -length(df_test)]
+X_test = model.matrix(~., df_test[, -length(df_test)])
 y_test <- df_test$target
-X_train = model.matrix(~., X_train)
-X_test = model.matrix(~., X_test)
-glm_reg <- cv.glmnet(X_train, y_train, 
-                  family="binomial"(link="logit"), alpha=0)
+set.seed(2021)
+glm_reg <- cv.glmnet(X_train, y_train, family="binomial", alpha=0, keep=TRUE)
 pred_train <- as.numeric(predict(glm_reg, X_train, type="response"))
 pred_test <- as.numeric(predict(glm_reg, X_test, type="response"))
 results["glm-ridge",] <- evaluate_metrics(pred_train, pred_test, df_train$target, df_test$target)
 results["glm-ridge",]
 ```
+
+```{r}
+plot(glm_reg)
+cnf <- confusion.glmnet(glm_reg,  newx=X_test, newy=y_test, family='binomial')
+print(cnf)
+rocs <- roc.glmnet(glm_reg, newx=X_test, newy=y_test)
+qplot(rocs$FPR, rocs$TPR) + ggtitle("ROC Curve") + xlab("FPR") + ylab("TPR")
+```
+We set `alpha = 0` for ridge. The cross-validated regularised logistic regression via `glmnet` identifies the optimal level of regularisation $\lambda$, that minimises in this case binomial deviance (by default using `nfolds=10`). In this case the optimal $log(\lambda)$ appears to be around $-2$.
+
+**Remark**: For further exploration we could consider using a $L^{1}$ penalty (lasso) and both the $L^{1}$ and $L^{2}$ penalty terms (ElasticNet) by adjusting the alpha parameter. A $L^{1}$ penatly (Lasso) would have the effect of shrinking some coefficients to $0$, instead of near $0$ as in ridge, which introduces sparsity and lends itself for feature selection.
 
 ### Random Forest
 
@@ -536,20 +603,18 @@ The random forest has a test accuracy of 0.836 and a test AUC of 0.872, which is
 
 Random forests can be used to rank the importance of different features. Specifically, the x-axis is the Mean Decrease Accuracy, which reports how much accuracy the model loses when we exclude this variable. The more the accuracy falls by, the more important the particular variable is. Note here that for categorical variables, each level of the category is classified as a single variable. In this plot, we recorded the 30 most important variables. 
 
-We then run another random forest with the most important features. In doing so, we hope to reduce the degree of overfitting by reducing the complexity of the model. However, it does not make sense to drop some levels of a categorical variable while including the other levels. Hence, as long as a level is present in the top 30 features, we will include the entire category in our updated random forest model. This results in us keeping only 22 variables, from an initial 30. 
+<!-- We then run another random forest with the most important features. In doing so, we hope to reduce the degree of overfitting by reducing the complexity of the model. However, it does not make sense to drop some levels of a categorical variable while including the other levels. Hence, as long as a level is present in the top 30 features, we will include the entire category in our updated random forest model. This results in us keeping only 22 variables, from an initial 30.  -->
 
-Our reduced random forest has a slightly improved test accuracy and a slightly decreased test AUC. However, it does not solve the potential problem of overfitting as train performance is still significantly better than test performance. In fact, train performance on the reduced random forest is better than the random forest with a full set of variables - the reduced complexity of the model enabled it to have a lower bias on the training set. 
+<!-- Our reduced random forest has a slightly improved test accuracy and a slightly decreased test AUC. However, it does not solve the potential problem of overfitting as train performance is still significantly better than test performance. In fact, train performance on the reduced random forest is better than the random forest with a full set of variables - the reduced complexity of the model enabled it to have a lower bias on the training set. -->
+
+We can inspect the Random Forest model predictions using Partial Dependence Plots. For example, for `cont4`, holding all other variables constant, outcome increases as we start to increase the values of this variable. Outcome then plateaus and eventually falls as we further increase values of  `cont4’. 
 
 
 ### XGBoost
 
-For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. Gradient Boosted Decision Trees. The XGBoost package, introduced in [@chen2016xgboost] is a variant of Gradient Boosted Decision Trees [@hastie2009elements, pp. 353-374]. For Gradient Boosting Trees, each decision tree is trained sequentially on the *residuals* of the previous decision tree, which has the effect of reducing bias.
+For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. Gradient Boosted Decision Trees. The XGBoost package, introduced in [@chen2016xgboost] is a variant of Gradient Boosted Decision Trees [@hastie2009elements, pp. 353-374]. For Gradient Boosting Trees, each decision tree is trained sequentially on the *residuals* of the previous decision tree, which has the effect of reducing bias, and the overall prediction is a linear combination of these individual decision trees. Similar to Random Forests, the key parameters are the number of trees or boosting rounds `nround`, the maximum depth of each tree `max_depth`. In addition, there are other parameters of interest such as the *learning rate* or the regularisation level. 
 
 ```{r xgb, message=FALSE, warning=FALSE}
-dmy_train <- dummyVars("~.", data = df_train[,-length(df_train)])
-dmy_test <- dummyVars("~.", data = df_test[,-length(df_test)])
-X_train <- as.matrix(data.frame(predict(dmy_train,df_train)))
-X_test <- as.matrix(data.frame(predict(dmy_test,df_test)))
 y_train = as.integer(as.matrix(df_train$target))
 y_test = as.integer(as.matrix(df_test$target))
 bst <- xgboost(data = X_train, label=y_train, max_depth = 2, nround = 10, 
@@ -569,16 +634,21 @@ xgboost::xgb.ggplot.shap.summary(X_test, model = bst,
                                  target_class = 1, top_n = 20)  # Summary plot
 ```
 
+We obtain a test accuracy of $0.827$ and test AUC of $0.8627$. In this case, for our particular selection of parameters the model may be underfit.
+
+For interpretability we can use *Feature Importances*. In the case of XGBoost, the default feature importance is the *gain*, the contribution of the feature to the prediction. We can also use to *Shapley Values* [@lundberg2017unified], which capture how each feature contributes to each prediction. From the Shapley Value plot, we can see that higher values of `cat16B` (which would imply that `cat16 == B`) is associated with a greater Shapley Value and impact on the prediction.
+
 ### CatBoost
 
-We also consider briefly examine the `catboost` library for **gradient boosted decision trees**, given its popularity on machine learning competitions such as Kaggle. The CatBoost library has the advantage of learning a *target encoding*, i.e. some numerical value for every category for each  categorical variables. From an implementation point of view, this may reduce the preprocessing that may be required. For details on CatBoost, refer to [@prokhorenkova2017catboost]. 
+We also briefly examine the `catboost` library for **gradient boosted decision trees**, given its popularity on machine learning competitions such as Kaggle. The CatBoost library has the advantage of learning a *target encoding*, i.e. some numerical value for every category for each  categorical variables. From an implementation point of view, this may reduce the preprocessing that may be required.For details on CatBoost, refer to [@prokhorenkova2017catboost].
 
-Again, the key parameters are the number of trees (iterations), and the *depth* of each tree. Due to computational limtations, we select arbitrary parameters `iterations = 10` and `depth = 8`; these could be further fine-tuned using hyperparameter optimisation.
+Again, the key parameters are the number of trees (iterations), and the *depth* of each tree. Due to computational limitations, we select arbitrary parameters `iterations = 10` and `depth = 8`; these could be further fine-tuned using hyperparameter optimisation.
+
 
 ```{r cb, message=FALSE, warning=FALSE}
 X_train = df_train[,c(cat_feats, cont_feats)]
-y_train = as.integer(df_train$target)
 X_test = df_test[,c(cat_feats, cont_feats)]
+y_train = as.integer(df_train$target)
 y_test = as.integer(df_test$target)
 
 pool <- catboost.load_pool(X_train, y_train, cat_features = cat_feats)
@@ -626,15 +696,17 @@ We could also set the type of feature importance to Shapley Values, although we 
 results[order(results$test_auc, results$test_acc),]
 ```
 
-Although the tree-based methods are less interpretable and more "black box" to some extent, we can make use of model interpretability techniques.
+Here, we ordered the list of models in ascending performance on the test data. We observe that complex models (random forests, xgboosts, catboosts) do not necessarily perform the best on the test data. Rather, the ridge logistic regression performs the best in terms of test AUC. Arguably, it is a simpler model than the tree-based models as it still relies on a logistic regression framework while shrinking coefficients towards 0. 
 
-It could be that our resutls are not fully robust, given we have subsampled the original data.
+Interestingly, we also observe a high degree of overfitting by the more complex models as they (especially the random forest) fit very well on the training data but do not generalise very well on an out-of-sample test data. Even though the ridge regression does not fit the train data as well, it is able to generalise extremely well to the test data and hence achieve the overall highest test AUC.
+
+Furthermore, although the tree-based methods are less interpretable and more “black box” to some extent, we can make use of model interpretability techniques. In addition, it could be that our results are not fully robust, given we have subsampled the original data. Complex models tend to do better when the number of observations is large; hence, it is plausible that these will perform better if we use the entire data set. 
 
 ## Conclusion
+In this project, we demonstrated the use of logistic regression, gradient descent, regularisation, random forest, gradient boosting and hyperparameter tuning techniques to achieve interpretability and model accuracy (in separate cases) in predicting the amount of an insurance claim. [Model] was the model with highest AUC, although interpretability was sacrificed. On the other hand, our baseline model with only a few predictors is easy to interpret, however it has a relatively low AUC of 0.703. In practice, depending on whether the goals of the company lean towards prediction or explanation, an appropriate trade-off between model complexity and interpretability has to be chosen. 
 
-In this project, we demonstrated the use of logistic regression, gradient descent, regularisation, random forest, gradient boosting and hyperparameter tuning techniques to achieve interpretability and model accuracy (in separate cases) in predicting the amount of an insurance claim. Model ___ was the model with highest AUC, although interpretability was sacrificed. On the other hand, our baseline model with only a few predictors is easy to interpret, however it has a relatively low AUC of 0.703. In practice, depending on whether the goals of the company lean towards prediction or explanation, an appropriate trade-off between model complexity and interpretability has to be chosen. 
+From the insurer’s profit perspective, understanding which characteristics are highly correlated with large amounts of claims could also be used to inform whether or not a particular insurance application is accepted, even if causality cannot be inferred. However, this might lead to some legal and/or ethical issues. For example, the UK’s 2010 Equality Act makes discriminating on nine protected characteristics, including age, gender, race and religion, illegal [@bias2020]. Therefore, proper data governance needs to be maintained and privacy impact assessments need to be conducted before any machine learning models of this kind are deployed in industry [@GDPR].
 
-From the insurer’s profit perspective, understanding which characteristics are highly correlated with large amounts of claims could also be used to inform whether or not a particular insurance application is accepted, even if causality cannot be inferred. However, this might lead to some legal and/or ethical issues. For example, the UK’s 2010 Equality Act makes discriminating on nine protected characteristics, including age, gender, race and religion, illegal (Pattni, 2020). Therefore, proper data governance needs to be maintained and privacy impact assessments need to be conducted before any machine learning models of this kind are deployed in industry (GDPR, 2018).
 
 
 
@@ -691,8 +763,6 @@ glmnet_model <-
   logistic_reg() %>%
   set_engine("glmnet", seed=2021) %>%
   set_mode("classification")
-
-
 
 glm_reg <- fit(glmnet_workflow, data = df_train)
 ```
