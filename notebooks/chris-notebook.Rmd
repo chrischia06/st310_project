@@ -60,19 +60,12 @@ references:
   issued:
     year: 2016
   URL: "https://arxiv.org/pdf/1603.02754.pdf"
-
 - id: 
   title: ‘VARIABLE IMPORTANCE PLOT’ AND VARIABLE SELECTION
-
   author: Arthur Charpentier
   issued:
     year: 2015
   URL: “https://freakonometrics.hypotheses.org/19835”
-- id: chen2016xgboost
-  title: "XGBoost: A Scalable Tree Boosting System"
-  author: Chen, Tianqi and Guestrin, Carlos
-  issued:
-    year: 2016
 - id: parr2019moml
   title: "The Mechanics of Machine Learning"
   author: "Parr, Terence and Howard, Jeremy"
@@ -175,12 +168,13 @@ library(data.table)
 library(doParallel)
 library(foreach)
 # modelling
-library(caret)
 library(tidymodels)
 library(glmnet)
 library(randomForest)
 library(xgboost)
 library(catboost)
+library(treesnip)
+library(parsnip)
 # metrics
 library(car) #outliers
 library(pROC)
@@ -342,7 +336,7 @@ We first consider a naive model that always predicts a single label (in this cas
 
 We also consider the **ROC-AUC metric** (Receiving Operator Characteristic Area Under the Curve). Given the problem is one related to insurance, the modelling outcome of interest is not only to obtain the correct predictions (accuracy), but also accurate probabilities, which the AUC metric captures to some extent. 
 
-The AUC metric calculates the area under the ROC-curve, the plot of the true positive rate or *sensitivity* $\frac{TP}{TP + FN}$ against the false positive rate $\frac{FN}{TN + FP}$, assessing the performance of the classifier's predicted probabilities across all possible decision thresholds. A classifier that always predicts 0s would result in a baseline AUC of $0.5$.
+The AUC metric calculates the area under the ROC-curve, the plot of the true positive rate or *sensitivity* $\frac{TP}{TP + FN}$ against the false positive rate $\frac{FP}{TN + FP}$, assessing the performance of the classifier's predicted probabilities across all possible decision thresholds. A classifier that always predicts 0s would result in a baseline AUC of $0.5$.
 
 As we do not know the specific threshold relevant to the insurance context of the problem, we will report both accuracy, with a decision threshold set to $> 0.5$, and the AUC score for all models considered. In practice, the decision threshold would largely depend on the requirements of the modeller.
 
@@ -496,7 +490,7 @@ We now run a logistic regression using all 31 predictors. The regression coeffic
 
 ```{r glm-full-results, message=FALSE}
 glm_full <- glm(target~., data=df_train, family=binomial(link="logit"), 
-            control = list(maxit = 100))
+            control = list(maxit = 30))
 
 pred_train <- predict(glm_full, df_train, type="response")
 glm_full$xlevels = lapply(df[,cat_feats], levels)
@@ -505,9 +499,9 @@ results["glm-full",] <- evaluate_metrics(pred_train, pred_test, df_train$target,
 results["glm-full",]
 ```
 
-The full model has a higher train accuracy (0.801) but lower test accuracy (0.59) than the baseline model,and the test AUC is 0.543, lower than our baseline. This may be indicative of overfitting, and an example of the bias-variance trade-off; the more complex, full model with 31 predictors has a lower bias but higher variance than the simpler, baseline model with 4 predictors. 
+The full model has a higher train accuracy (0.82) but lower test accuracy (0.536) than the baseline model,and the test AUC is 0.533, lower than our baseline. This may be indicative of overfitting, and an example of the bias-variance trade-off; the more complex, full model with 31 predictors has a lower bias but higher variance than the simpler, baseline model with 4 predictors. 
 
-We also obtain the errors: “prediction from a rank-deficient fit may be misleading” which and “glm.fit: algorithm did not converge”, which may be indicative of multicollinearity. This is likely due to the inclusion of all the categorical variables; with over 600 levels for all the categorical variables it is likely that they are collinear in some way. In subsequent sections, we aim to overcome this to improve the stability of our model using shrinkage in a [subsequent section](#regularised-logistic-regression).
+We also obtain the errors: “prediction from a rank-deficient fit may be misleading” which and “glm.fit: algorithm did not converge”, which may be indicative of multicollinearity. This is likely due to the inclusion of all the categorical variables; with over 600 levels for all the categorical variables it is likely that they are collinear in some way. In subsequent sections, we aim to overcome this to improve the stability of our model using shrinkage in a [subsequent section](#regularised-logistic-regression). We also briefly explore merging categories, as an alternative approach, which can be found in the [Appendix](#Appendix)
 
 ### Outlier Detection
 At this stage, we suspect that some outliers might be heavily influencing the performance of our models, and hence we seek to detect outliers using a few measures. Formally, outliers are defined as observations with a response vector that is unusual conditional on covariates (predictors). Firstly, we look for points with large (studentised) residuals. We can then test if these residuals are significantly larger than those of other points by examining the Bonferroni-adjusted p-values. Ten points are identified to have large studentised residuals with adjust p-values less than 0.05. We store the indices of these points to be removed later.
@@ -562,21 +556,49 @@ We set `alpha = 0` for ridge. The cross-validated regularised logistic regressio
 
 To improve performance, we draw on the usage of non-linear tree-based models, specifically random forests[@breiman2016randomforests]. Intuitively, a random forest averages different decision trees (known as bagging) so as to reduce the variance of individual trees. This thus reduces the likelihood of individual trees overfitting to the training data.
 
-```{r rf ,message=FALSE, warning = FALSE}
-rf_recipe <- recipe(target~., data = df_train)
+We use the `tidymodels` package with the `ranger` backend to fit a Random Forest with hyperparameter tuning. We focus on two key parameters: `min_n`, the number of features subsampled by each decision tree, and `mtry`, the number of variables used for splitting at each node. Both of these hyperparameters influence *model complexity* and have the effect of *regularising the model*.
 
-rf_model <- 
-  rand_forest(trees=100) %>%
-  set_engine("ranger", importance="impurity", seed=2021) %>%
-  set_mode("classification")
+```{r rf, message=FALSE, warning = FALSE}
+# Model Specification
+rf_rec <- recipe(target~., data = df_train)
 
-rf_workflow <- workflow() %>%
-  add_recipe(rf_recipe) %>%
-  add_model(rf_model)
+tune_spec <- rand_forest(
+  mtry = tune(),
+  trees = 100,
+  min_n = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("ranger", importance="impurity", seed=2021)
 
-rf1 <- fit(rf_workflow, df_train)
-ranger_obj <- pull_workflow_fit(rf1)$fit
+tune_wf <- workflow() %>%
+  add_recipe(rf_rec) %>%
+  add_model(tune_spec)
+
+# Hyperparameter Tuning
+set.seed(234)
+trees_folds <- vfold_cv(df_train, v = 3)
+doParallel::registerDoParallel()
+set.seed(345)
+tune_res <- tune_grid(
+  tune_wf,
+  resamples = trees_folds,
+  grid = 20
+)
+
+autoplot(tune_res)
+# fit best model from hyperparameters
+best_auc <- select_best(tune_res, "roc_auc")
+final_rf <- finalize_model(
+  tune_spec,
+  best_auc
+)
+final_wf <- workflow() %>%
+  add_recipe(rf_rec) %>%
+  add_model(final_rf)
+rf1 <- fit(final_wf, df_train)
+
 # plot feature importances
+ranger_obj <- pull_workflow_fit(rf1)$fit
 rf_feat_imp <- rownames_to_column(data.frame(ranger_obj$variable.importance));
 names(rf_feat_imp) <- c("feat", "importance")
 ggplot(rf_feat_imp, aes(x = reorder(feat, importance), y = importance))+ 
@@ -584,8 +606,9 @@ ggplot(rf_feat_imp, aes(x = reorder(feat, importance), y = importance))+
       ylab("Feature Importance (Gini Impurity)")+
       xlab("Feature")+
       ggtitle("Random Forest Feature Importances")
+
 #evaluate metrics
-pred_train <- unlist(predict(rf1,df_train,type='prob')[,2])
+pred_train <- unlist(predict(rf1,df_train, type='prob')[,2])
 pred_test <- unlist(predict(rf1, df_test, type='prob')[,2])
 results["rf",] <- evaluate_metrics(pred_train, pred_test, df_train$target, df_test$target)
 results["rf",]
@@ -599,7 +622,7 @@ plots <- lapply(names(df_train)[cont_feats], temp)
 wrap_plots(plots)
 ```
 
-The random forest has a test accuracy of 0.836 and a test AUC of 0.872, which is higher than the previous linear models. However, the train accuracy and AUC are significantly higher than the test performance, which suggest that there may be some degree of overfitting to the train data. 
+The random forest has a test accuracy of 0.837 and a test AUC of 0.883, which is higher than the previous linear models. However, the train accuracy and AUC are significantly higher than the test performance, which suggest that there may be some degree of overfitting to the train data. 
 
 Random forests can be used to rank the importance of different features. Specifically, the x-axis is the Mean Decrease Accuracy, which reports how much accuracy the model loses when we exclude this variable. The more the accuracy falls by, the more important the particular variable is. Note here that for categorical variables, each level of the category is classified as a single variable. In this plot, we recorded the 30 most important variables. 
 
@@ -607,12 +630,15 @@ Random forests can be used to rank the importance of different features. Specifi
 
 <!-- Our reduced random forest has a slightly improved test accuracy and a slightly decreased test AUC. However, it does not solve the potential problem of overfitting as train performance is still significantly better than test performance. In fact, train performance on the reduced random forest is better than the random forest with a full set of variables - the reduced complexity of the model enabled it to have a lower bias on the training set. -->
 
-We can inspect the Random Forest model predictions using Partial Dependence Plots. For example, for `cont4`, holding all other variables constant, outcome increases as we start to increase the values of this variable. Outcome then plateaus and eventually falls as we further increase values of  `cont4’. 
+Finally, for model interpretability we can inspect the Random Forest model predictions using Partial Dependence Plots, which plots how the predictions varies as the predictors varies.  For example, for `cont4`, holding all other variables constant, outcome increases as we start to increase the values of this variable. The outcome then plateaus and eventually falls as we further increase values of  `cont4’. 
 
 
 ### XGBoost
 
-For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. Gradient Boosted Decision Trees. The XGBoost package, introduced in [@chen2016xgboost] is a variant of Gradient Boosted Decision Trees [@hastie2009elements, pp. 353-374]. For Gradient Boosting Trees, each decision tree is trained sequentially on the *residuals* of the previous decision tree, which has the effect of reducing bias, and the overall prediction is a linear combination of these individual decision trees. Similar to Random Forests, the key parameters are the number of trees or boosting rounds `nround`, the maximum depth of each tree `max_depth`. In addition, there are other parameters of interest such as the *learning rate* or the regularisation level. 
+For completeness, we also consider the `xgboost` library for **gradient boosted decision trees**. Gradient Boosted Decision Trees. The XGBoost package, introduced in [@chen2016xgboost] is a variant of Gradient Boosted Decision Trees [@hastie2009elements, pp. 353-374]. For Gradient Boosting Trees, each decision tree is trained sequentially on the *residuals* of the previous decision tree, which has the effect of reducing bias, and the overall prediction is a linear combination of these individual decision trees. 
+
+Similar to Random Forests, the hyperparameters influence the *model complexity*. In this case we focus on two key hyperparameters: the maximum depth of each tree `max_depth`, and the `learning_rate`.  We keep the the number of trees or “boosting rounds” fixed `nround = 100` for faster training, although this could be a hyperparameter to tune as well.
+
 
 ```{r xgb, message=FALSE, warning=FALSE}
 y_train = as.integer(as.matrix(df_train$target))
@@ -646,20 +672,52 @@ Again, the key parameters are the number of trees (iterations), and the *depth* 
 
 
 ```{r cb, message=FALSE, warning=FALSE}
+# Define Model Specification
+cb_spec <- boost_tree(
+  trees = 100, 
+  tree_depth = tune(),
+  learn_rate = tune()                         ## step size
+) %>% 
+  set_engine("catboost") %>% 
+  set_mode("classification")
+cb_wf <- workflow() %>%
+  add_formula(target ~.) %>%
+  add_model(cb_spec)
+
+# Hyperparameter Tuning
+set.seed(234)
+trees_folds <- vfold_cv(df_train, v = 3)
+doParallel::registerDoParallel()
+set.seed(345)
+cb_res <- tune_grid(
+  cb_wf,
+  resamples = trees_folds,
+  grid = 5
+)
+autoplot(cb_res)
+```
+
+```{r cb2}
+# Fit best model
+best_cb_auc <- select_best(cb_res, "roc_auc")
+final_cb <- finalize_workflow(
+  cb_wf,
+  best_cb_auc
+)
+cb <- fit(final_cb, df_train)
+cb_model <- pull_workflow_fit(cb)$fit
+
+# Evaluate Metrics
 X_train = df_train[,c(cat_feats, cont_feats)]
 X_test = df_test[,c(cat_feats, cont_feats)]
-y_train = as.integer(df_train$target)
-y_test = as.integer(df_test$target)
-
+y_train = as.integer(df_train$target) - 1
+y_test = as.integer(df_test$target) - 1
 pool <- catboost.load_pool(X_train, y_train, cat_features = cat_feats)
-model <- catboost.train(pool, params=list(depth = 8, iterations = 10, 
-                                          loss_function='Logloss', verbose=0))
+pred_train <- catboost.predict(cb_model, catboost.load_pool(X_train), prediction_type = 'Probability')
+pred_test <- catboost.predict(cb_model, catboost.load_pool(X_test), prediction_type = 'Probability')
 
-pred_train <- catboost.predict(model, catboost.load_pool(X_train), prediction_type = 'Probability')
-pred_test <- catboost.predict(model, catboost.load_pool(X_test), prediction_type = 'Probability')
-
-# feature importance
-feat_importance <- catboost.get_feature_importance(model, pool)
+# Feature importance
+feat_importance <- catboost.get_feature_importance(cb_model, pool)
 importances <- data.frame(feat_importance[order(feat_importance, decreasing=FALSE),])
 importances$features = rownames(importances)
 names(importances) <- c("importance","features")
@@ -669,7 +727,7 @@ ggplot(importances, aes(x=importance, y=features)) +
   ggtitle("CatBoost Feature Importance")
 
 #Shapley Values
-data_shap_tree <- catboost.get_feature_importance(model, pool = pool,
+data_shap_tree <- catboost.get_feature_importance(cb_model, pool = pool,
                                                   type = "ShapValues")
 data_shap_tree <- data.frame(data_shap_tree[, -ncol(data_shap_tree)]) 
 names(data_shap_tree) = names(df[, c(cat_feats, cont_feats)])
@@ -682,7 +740,7 @@ results["catboost",] <- evaluate_metrics(pred_train, pred_test, df_train$target,
 results["catboost",]
 ```
 
-We obtain a train accuracy of $0.882$ and a train AUC of $0.921$, versus a test accuracy of $0.836$ and test AUC $0.858$. This suggests that the model may be overfitting for our particular choice of paramters (and also for our subsampled dataset size).
+We obtain a train accuracy of $0.766$ and a train AUC of $0.866$, versus a test accuracy of $0.753	$ and test AUC $0.871$. Interestingly, this suggests that the model may be underfitting for our particular choice of parameters (and also for our subsampled dataset size), and it is possible that further optimisations can be done.
 
 For interpretability, we can use CatBoost's *feature importance*. From the [CatBoost documentation](#https://catboost.ai/docs/concepts/fstr.html), CatBoost's in-built and default feature importance does the following:
 
@@ -703,9 +761,10 @@ Interestingly, we also observe a high degree of overfitting by the more complex 
 Furthermore, although the tree-based methods are less interpretable and more “black box” to some extent, we can make use of model interpretability techniques. In addition, it could be that our results are not fully robust, given we have subsampled the original data. Complex models tend to do better when the number of observations is large; hence, it is plausible that these will perform better if we use the entire data set. 
 
 ## Conclusion
-In this project, we demonstrated the use of logistic regression, gradient descent, regularisation, random forest, gradient boosting and hyperparameter tuning techniques to achieve interpretability and model accuracy (in separate cases) in predicting the amount of an insurance claim. [Model] was the model with highest AUC, although interpretability was sacrificed. On the other hand, our baseline model with only a few predictors is easy to interpret, however it has a relatively low AUC of 0.703. In practice, depending on whether the goals of the company lean towards prediction or explanation, an appropriate trade-off between model complexity and interpretability has to be chosen. 
+In this project, we demonstrated the use of logistic regression, gradient descent, regularisation, random forest, gradient boosting and hyperparameter tuning techniques to achieve interpretability and model accuracy (in separate cases) in predicting the amount of an insurance claim. From the models we explored, regularised logistic regression was the model with highest AUC, which suggests that a relatively interpretable model can also have a fair predictive performance. Nonetheless, in comparison with, our baseline model with only a few predictors, the regularised logistic regression is more difficult to interpret given the large number of predictors (when all levels of the categorical variable are considered). On the other hand, it is possible that a higher predictive performance could be attained by further fine-tuning a non-linear, less interpretable model, for example using a **deep neural network**. As a short remark, the winners of this contest made use of a *denoising auto-encoder* architecture (see [here](#https://www.kaggle.com/c/tabular-playground-series-mar-2021/discussion/229833). In practice, depending on whether the goals of the company lean towards prediction or explanation, an appropriate trade-off between model complexity and interpretability has to be chosen. 
 
 From the insurer’s profit perspective, understanding which characteristics are highly correlated with large amounts of claims could also be used to inform whether or not a particular insurance application is accepted, even if causality cannot be inferred. However, this might lead to some legal and/or ethical issues. For example, the UK’s 2010 Equality Act makes discriminating on nine protected characteristics, including age, gender, race and religion, illegal [@bias2020]. Therefore, proper data governance needs to be maintained and privacy impact assessments need to be conducted before any machine learning models of this kind are deployed in industry [@GDPR].
+
 
 
 
@@ -728,108 +787,21 @@ glm_full_removed <- update(glm_full, subset = c(-removal_list))
 compareCoefs(glm_full, glm_full_influencers, glm_full_outliers, glm_full_removed)
 ```
 
-```{r}
-set.seed(2021)
-cv_splits <- rsample::vfold_cv(df_train, strata = target, v= 3)
-mod <- logistic_reg(penalty = tune(),
-                    mixture = tune()) %>%
-  set_engine("glmnet")
+### Merging Infrequent Categories
 
-glmnet_recipe <- recipe(target~.,data = df_train) %>% 
-  step_dummy(all_nominal(), -all_outcomes())
+We briefly experiment with grouping infrequently occuring categories with the `step_order` preprocessing from `tidymodels`. We obtain a greater test AUC, and it appears that the training and test scores are similar. It is possible that the predictive performance could be further improved by adjusting the threshold; it appears that some *information* is lost when merging the categories, in particular comparing with the ridge logistic regression.
 
-glmnet_workflow<- workflow() %>%
-  add_recipe(glmnet_recipe) %>%
+```{r glm-infrequent}
+mod <- logistic_reg() %>% set_engine("glm", maxit=50)
+glm_recipe <- recipe(target~.,data = df_train) %>%
+  step_other(all_nominal(), -all_outcomes(), threshold=0.05)
+glm_workflow<- workflow() %>%
+  add_recipe(glm_recipe) %>%
   add_model(mod)
-
-glmn_set <- parameters(penalty(range = c(-5,1), trans = log10_trans()),
-                       mixture())
-
-glmn_grid <- 
-  grid_regular(glmn_set, levels = c(7, 5))
-ctrl <- control_grid(save_pred = TRUE, verbose = TRUE)
-
-glmn_tune <- 
-  tune_grid(glmnet_workflow,
-            resamples = cv_splits,
-            grid = glmn_grid,
-            metrics = metric_set(roc_auc),
-            control = ctrl)
-
-
-best_glmn <- select_best(glmn_tune, metric = "roc_auc")
-
-glmnet_model <- 
-  logistic_reg() %>%
-  set_engine("glmnet", seed=2021) %>%
-  set_mode("classification")
-
-glm_reg <- fit(glmnet_workflow, data = df_train)
+glm <- fit(glm_workflow, df_train)
+pred_train <- as.numeric(unlist(predict(glm, df_train, type='prob')[, 2]))
+pred_test <- as.numeric(unlist(predict(glm, df_test, type='prob')[, 2]))
+results["glm-merged-cats",] <- evaluate_metrics(pred_train, pred_test, df_train$target, df_test$target)
+results["glm-merged-cats",]
 ```
 
-
-```{r}
-xgb_spec <- boost_tree(
-  trees = 100, 
-  tree_depth = tune(),
-  learn_rate = tune()                         ## step size
-) %>% 
-  set_engine("xgboost") %>% 
-  set_mode("classification")
-
-xgb_grid <- grid_latin_hypercube(
-  tree_depth(),
-  learn_rate(),
-  size = 5
-)
-
-xgb_wf <- workflow() %>%
-  add_formula(target ~ .) %>%
-  add_model(xgb_spec)
-
-set.seed(123)
-vb_folds <- vfold_cv(df_train, strata = target)
-
-doParallel::registerDoParallel()
-
-set.seed(234)
-xgb_res <- tune_grid(
-  xgb_wf,
-  resamples = vb_folds,
-  grid = xgb_grid,
-  control = control_grid(save_pred = TRUE)
-)
-best_auc <- select_best(xgb_res, "roc_auc")
-final_xgb <- finalize_workflow(
-  xgb_wf,
-  best_auc
-)
-library(vip)
-
-final_xgb %>%
-  fit(data = vb_train) %>%
-  pull_workflow_fit() %>%
-  vip(geom = "point")
-
-final_res <- last_fit(final_xgb, df_split)
-
-collect_metrics(final_res)
-
-xgb_res %>%
-  collect_metrics() %>%
-  filter(.metric == "roc_auc") %>%
-  select(mean, mtry:sample_size) %>%
-  pivot_longer(mtry:sample_size,
-               values_to = "value",
-               names_to = "parameter"
-  ) %>%
-  ggplot(aes(value, mean, color = parameter)) +
-  geom_point(alpha = 0.8, show.legend = FALSE) +
-  facet_wrap(~parameter, scales = "free_x") +
-  labs(x = NULL, y = "AUC")
-```
-
-```{r}
-"https://curso-r.github.io/treesnip/index.html"
-library(treesnip)
-```
