@@ -1,13 +1,13 @@
 # ST310 Course Project
 
-Contributors: [Zhen Yen Chan](#https://github.com/zhenyenchan) , [Mun Fai Chan](#https://github.com/MUNFAI15), [Chris Chia](#https://github.com/chrischia06/)
+Contributors: [Zhen Yen Chan @zhenyenchan](https://github.com/zhenyenchan) , [Mun Fai Chan @MUNFAI15](https://github.com/MUNFAI15), [Chris Chia @chrischia06](https://github.com/chrischia06/)
 
-Group Project for the [ST310 course](#https://www.lse.ac.uk/resources/calendar2020-2021/courseGuides/ST/2020_ST310.htm) .The aim of this project is to demonstrate the use of machine learning techniques learnt in the ST310 Machine Learning module. We rely on both linear (Logistic Regression) and non-linear methods (Random Forests and Gradient Boosted Decision Trees) for a classification problem.
+Group Project for the [ST310 course](https://www.lse.ac.uk/resources/calendar2020-2021/courseGuides/ST/2020_ST310.htm) .The aim of this project is to demonstrate the application of machine learning techniques to a general supervised learning classification problem, in particular linear (Logistic Regression) and non-linear methods (Random Forests and Gradient Boosted Decision Trees) using the tidymodels framework in R.
 
-The final notebook is available at [](#)
+The final notebook is available [here](https://chrischia06.github.io/st310_project/notebooks/chris-notebook.nb.html)
 
 
-## Timeline
+## Development
 
 + 21/04/2021 - first meeting, project outline and plan, initial code
 + 26/04/2021 - second meeting, modelling, EDA, preprocessing
